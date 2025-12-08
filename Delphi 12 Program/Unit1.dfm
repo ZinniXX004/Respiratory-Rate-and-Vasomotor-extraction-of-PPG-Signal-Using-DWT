@@ -1,0 +1,2154 @@
+object Form1: TForm1
+  Left = 0
+  Top = 0
+  Caption = 'Advanced PPG Analyzer - DWT & HRV'
+  ClientHeight = 850
+  ClientWidth = 1480
+  Color = clBtnFace
+  Font.Charset = DEFAULT_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -12
+  Font.Name = 'Segoe UI'
+  Font.Style = []
+  Position = poScreenCenter
+  OnCreate = FormCreate
+  TextHeight = 15
+  object PanelTop: TPanel
+    Left = 0
+    Top = 0
+    Width = 1480
+    Height = 145
+    Align = alTop
+    TabOrder = 0
+    ExplicitWidth = 1478
+    object GroupBoxControls: TGroupBox
+      Left = 16
+      Top = 8
+      Width = 329
+      Height = 129
+      Caption = ' 1. Load & Parameters '
+      TabOrder = 0
+      object Label1: TLabel
+        Left = 16
+        Top = 75
+        Width = 108
+        Height = 15
+        Caption = 'Downsample Factor:'
+      end
+      object Label2: TLabel
+        Left = 16
+        Top = 101
+        Width = 106
+        Height = 15
+        Caption = 'PPG Column Name:'
+      end
+      object btnLoadData: TButton
+        Left = 16
+        Top = 24
+        Width = 145
+        Height = 41
+        Caption = '2. Load PPG Data (.csv)'
+        TabOrder = 0
+        OnClick = btnLoadDataClick
+      end
+      object btnProcess: TButton
+        Left = 167
+        Top = 24
+        Width = 146
+        Height = 41
+        Caption = '4. Run Analysis Pipeline'
+        Enabled = False
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -12
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        TabOrder = 1
+        OnClick = btnProcessClick
+      end
+      object SpinEditDownsample: TSpinEdit
+        Left = 130
+        Top = 72
+        Width = 61
+        Height = 24
+        MaxValue = 10
+        MinValue = 1
+        TabOrder = 2
+        Value = 4
+      end
+      object edtColumnName: TEdit
+        Left = 130
+        Top = 98
+        Width = 183
+        Height = 23
+        TabOrder = 3
+        Text = 'PPG'
+      end
+    end
+    object MemoLog: TMemo
+      Left = 921
+      Top = 14
+      Width = 463
+      Height = 125
+      ReadOnly = True
+      ScrollBars = ssVertical
+      TabOrder = 3
+    end
+    object GroupBoxPhysRates: TGroupBox
+      Left = 706
+      Top = 10
+      Width = 209
+      Height = 129
+      Caption = ' Physiological Rates '
+      TabOrder = 2
+      object Label4: TLabel
+        Left = 11
+        Top = 21
+        Width = 103
+        Height = 15
+        Caption = 'Breaths per Minute:'
+      end
+      object LabelVasoRate: TLabel
+        Left = 11
+        Top = 74
+        Width = 85
+        Height = 15
+        Caption = 'Vasomotor (Hz):'
+      end
+      object edtRespRate: TEdit
+        Left = 11
+        Top = 40
+        Width = 186
+        Height = 28
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -15
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        ReadOnly = True
+        TabOrder = 0
+        Text = 'N/A'
+      end
+      object edtVasoRate: TEdit
+        Left = 11
+        Top = 92
+        Width = 186
+        Height = 28
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -15
+        Font.Name = 'Segoe UI'
+        Font.Style = [fsBold]
+        ParentFont = False
+        ReadOnly = True
+        TabOrder = 1
+        Text = 'N/A'
+      end
+    end
+    object GroupBoxSourceSelection: TGroupBox
+      Left = 351
+      Top = 8
+      Width = 349
+      Height = 129
+      Caption = ' 3. Source Selection '
+      TabOrder = 1
+      object Label5: TLabel
+        Left = 16
+        Top = 23
+        Width = 103
+        Height = 15
+        Caption = 'HRV Analysis From:'
+      end
+      object Label6: TLabel
+        Left = 16
+        Top = 57
+        Width = 88
+        Height = 15
+        Caption = 'Resp. Rate From:'
+      end
+      object Label7: TLabel
+        Left = 16
+        Top = 94
+        Width = 115
+        Height = 15
+        Caption = 'Vasomotor Act. From:'
+      end
+      object cbHRVSource: TComboBox
+        Left = 136
+        Top = 20
+        Width = 194
+        Height = 23
+        Style = csDropDownList
+        TabOrder = 2
+      end
+      object cbRRSource: TComboBox
+        Left = 136
+        Top = 49
+        Width = 195
+        Height = 23
+        Style = csDropDownList
+        TabOrder = 1
+      end
+      object cbVMASource: TComboBox
+        Left = 137
+        Top = 91
+        Width = 193
+        Height = 23
+        Style = csDropDownList
+        TabOrder = 0
+      end
+    end
+    object BitBtn1: TBitBtn
+      Left = 1390
+      Top = 14
+      Width = 90
+      Height = 125
+      Caption = '&EXIT'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clRed
+      Font.Height = -20
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      Kind = bkClose
+      NumGlyphs = 2
+      ParentFont = False
+      TabOrder = 4
+    end
+  end
+  object PageControlMain: TPageControl
+    Left = 0
+    Top = 145
+    Width = 1480
+    Height = 705
+    ActivePage = TabSheetHRVFreq
+    Align = alClient
+    TabOrder = 1
+    ExplicitWidth = 1478
+    ExplicitHeight = 697
+    object TabSheetSignalProcessing: TTabSheet
+      Caption = '1. Signal Processing'
+      object SplitterSP_H1: TSplitter
+        Left = 0
+        Top = 233
+        Width = 1472
+        Height = 5
+        Cursor = crVSplit
+        Align = alTop
+        ExplicitWidth = 1184
+      end
+      object SplitterSP_H2: TSplitter
+        Left = 0
+        Top = 471
+        Width = 1472
+        Height = 5
+        Cursor = crVSplit
+        Align = alTop
+        ExplicitWidth = 1392
+      end
+      object PanelSP1: TPanel
+        Left = 0
+        Top = 0
+        Width = 1472
+        Height = 233
+        Align = alTop
+        BevelOuter = bvNone
+        TabOrder = 0
+        ExplicitWidth = 1470
+        object SplitterSP_V1: TSplitter
+          Left = 693
+          Top = 0
+          Height = 233
+          ExplicitLeft = 589
+        end
+        object ChartRawSignal: TChart
+          Left = 0
+          Top = 0
+          Width = 693
+          Height = 233
+          Title.Text.Strings = (
+            'Raw Signal')
+          View3D = False
+          Align = alLeft
+          TabOrder = 0
+          DefaultCanvas = 'TGDIPlusCanvas'
+          ColorPaletteIndex = 13
+          object SeriesRaw: TLineSeries
+            SeriesColor = clGray
+            Brush.BackColor = clDefault
+            Pointer.InflateMargins = True
+            Pointer.Style = psRectangle
+            XValues.Name = 'X'
+            XValues.Order = loAscending
+            YValues.Name = 'Y'
+            YValues.Order = loNone
+          end
+        end
+        object ChartFFTRaw: TChart
+          Left = 696
+          Top = 0
+          Width = 776
+          Height = 233
+          Title.Text.Strings = (
+            'FFT of Raw Signal')
+          View3D = False
+          Align = alClient
+          TabOrder = 1
+          ExplicitWidth = 774
+          DefaultCanvas = 'TGDIPlusCanvas'
+          ColorPaletteIndex = 13
+          object SeriesFFTRaw: TLineSeries
+            SeriesColor = clSkyBlue
+            Brush.BackColor = clDefault
+            Pointer.InflateMargins = True
+            Pointer.Style = psRectangle
+            XValues.Name = 'X'
+            XValues.Order = loAscending
+            YValues.Name = 'Y'
+            YValues.Order = loNone
+          end
+        end
+      end
+      object PanelSP2: TPanel
+        Left = 0
+        Top = 238
+        Width = 1472
+        Height = 233
+        Align = alTop
+        BevelOuter = bvNone
+        TabOrder = 1
+        ExplicitWidth = 1470
+        object SplitterSP_V2: TSplitter
+          Left = 693
+          Top = 0
+          Height = 233
+        end
+        object ChartDownsampled: TChart
+          Left = 0
+          Top = 0
+          Width = 693
+          Height = 233
+          Title.Text.Strings = (
+            'Downsampled Signal')
+          View3D = False
+          Align = alLeft
+          TabOrder = 0
+          DefaultCanvas = 'TGDIPlusCanvas'
+          ColorPaletteIndex = 13
+          object SeriesDownsampled: TLineSeries
+            SeriesColor = clTeal
+            Brush.BackColor = clDefault
+            Pointer.InflateMargins = True
+            Pointer.Style = psRectangle
+            XValues.Name = 'X'
+            XValues.Order = loAscending
+            YValues.Name = 'Y'
+            YValues.Order = loNone
+          end
+        end
+        object ChartFFTDownsampled: TChart
+          Left = 696
+          Top = 0
+          Width = 776
+          Height = 233
+          Title.Text.Strings = (
+            'FFT of Downsampled Signal')
+          View3D = False
+          Align = alClient
+          TabOrder = 1
+          ExplicitWidth = 774
+          DefaultCanvas = 'TGDIPlusCanvas'
+          ColorPaletteIndex = 13
+          object SeriesFFTDownsampled: TLineSeries
+            SeriesColor = clYellow
+            Brush.BackColor = clDefault
+            Pointer.InflateMargins = True
+            Pointer.Style = psRectangle
+            XValues.Name = 'X'
+            XValues.Order = loAscending
+            YValues.Name = 'Y'
+            YValues.Order = loNone
+          end
+        end
+      end
+      object PanelSP3: TPanel
+        Left = 0
+        Top = 476
+        Width = 1472
+        Height = 199
+        Align = alClient
+        BevelOuter = bvNone
+        TabOrder = 2
+        ExplicitWidth = 1470
+        ExplicitHeight = 191
+        object SplitterSP_V3: TSplitter
+          Left = 693
+          Top = 0
+          Height = 199
+        end
+        object ChartPreprocessed: TChart
+          Left = 0
+          Top = 0
+          Width = 693
+          Height = 199
+          Title.Text.Strings = (
+            'Pre-processed Signal')
+          View3D = False
+          Align = alLeft
+          TabOrder = 0
+          ExplicitHeight = 191
+          DefaultCanvas = 'TGDIPlusCanvas'
+          ColorPaletteIndex = 13
+          object SeriesPreprocessed: TLineSeries
+            SeriesColor = clLime
+            Brush.BackColor = clDefault
+            Pointer.InflateMargins = True
+            Pointer.Style = psRectangle
+            XValues.Name = 'X'
+            XValues.Order = loAscending
+            YValues.Name = 'Y'
+            YValues.Order = loNone
+          end
+        end
+        object ChartFFTPreprocessed: TChart
+          Left = 696
+          Top = 0
+          Width = 776
+          Height = 199
+          Title.Text.Strings = (
+            'FFT of Pre-processed Signal')
+          View3D = False
+          Align = alClient
+          TabOrder = 1
+          ExplicitWidth = 774
+          ExplicitHeight = 191
+          DefaultCanvas = 'TGDIPlusCanvas'
+          ColorPaletteIndex = 13
+          object SeriesFFTPreprocessed: TLineSeries
+            SeriesColor = clAqua
+            Brush.BackColor = clDefault
+            Pointer.InflateMargins = True
+            Pointer.Style = psRectangle
+            XValues.Name = 'X'
+            XValues.Order = loAscending
+            YValues.Name = 'Y'
+            YValues.Order = loNone
+          end
+        end
+      end
+    end
+    object TabSheetPeakDetection: TTabSheet
+      Caption = '2. Peak Detection'
+      ImageIndex = 1
+      object PageControlPeaks: TPageControl
+        Left = 0
+        Top = 0
+        Width = 1472
+        Height = 675
+        ActivePage = TabSheetCardiacPeaks
+        Align = alClient
+        TabOrder = 0
+        object TabSheetCardiacPeaks: TTabSheet
+          Caption = 'Cardiac Peaks (HRV)'
+          object ChartPeaks: TChart
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 645
+            Title.Text.Strings = (
+              'Cardiac Zero-Crossing Analysis (Maxima, Minima, Zero)')
+            View3D = False
+            Align = alClient
+            TabOrder = 0
+            DefaultCanvas = 'TGDIPlusCanvas'
+            ColorPaletteIndex = 13
+            object SeriesFilteredForPeaks: TLineSeries
+              SeriesColor = clGray
+              Title = 'Cardiac Signal'
+              Brush.BackColor = clDefault
+              Pointer.InflateMargins = True
+              Pointer.Style = psRectangle
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+            object SeriesZeroLine: TLineSeries
+              Depth = 0
+              SeriesColor = clBlack
+              Title = 'Zero Reference'
+              Brush.BackColor = clDefault
+              Pointer.InflateMargins = True
+              Pointer.Style = psRectangle
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+            object SeriesDetectedPeaks: TPointSeries
+              SeriesColor = clRed
+              Title = 'Maxima (Systolic)'
+              ClickableLine = False
+              Pointer.InflateMargins = True
+              Pointer.Style = psTriangle
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+            object SeriesDetectedMinima: TPointSeries
+              SeriesColor = clBlue
+              Title = 'Minima (Diastolic)'
+              ClickableLine = False
+              Pointer.InflateMargins = True
+              Pointer.Style = psDownTriangle
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+            object SeriesZeroCrossPoints: TPointSeries
+              SeriesColor = 33023
+              Title = 'Zero Crossings'
+              ClickableLine = False
+              Pointer.HorizSize = 2
+              Pointer.InflateMargins = True
+              Pointer.Style = psCircle
+              Pointer.VertSize = 2
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+          end
+        end
+        object TabSheetRespPeaks: TTabSheet
+          Caption = 'Respiratory Peaks'
+          ImageIndex = 1
+          object ChartRespPeaks: TChart
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 645
+            Title.Text.Strings = (
+              'Respiratory Zero-Crossing Analysis')
+            View3D = False
+            Align = alClient
+            TabOrder = 0
+            DefaultCanvas = 'TGDIPlusCanvas'
+            ColorPaletteIndex = 13
+            object SeriesRespSignal: TLineSeries
+              SeriesColor = clTeal
+              Title = 'Resp. Signal'
+              Brush.BackColor = clDefault
+              Pointer.InflateMargins = True
+              Pointer.Style = psRectangle
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+            object SeriesRespZeroLine: TLineSeries
+              SeriesColor = clBlack
+              Title = 'Zero Reference'
+              Brush.BackColor = clDefault
+              Pointer.InflateMargins = True
+              Pointer.Style = psRectangle
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+            object SeriesRespDetectedPeaks: TPointSeries
+              SeriesColor = clRed
+              Title = 'Maxima (Inhale)'
+              ClickableLine = False
+              Pointer.InflateMargins = True
+              Pointer.Style = psTriangle
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+            object SeriesRespDetectedMinima: TPointSeries
+              SeriesColor = clBlue
+              Title = 'Minima (Exhale)'
+              ClickableLine = False
+              Pointer.InflateMargins = True
+              Pointer.Style = psDownTriangle
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+            object SeriesRespZeroCrossPoints: TPointSeries
+              SeriesColor = 33023
+              Title = 'Zero Crossings'
+              ClickableLine = False
+              Pointer.HorizSize = 2
+              Pointer.InflateMargins = True
+              Pointer.Style = psCircle
+              Pointer.VertSize = 2
+              XValues.Name = 'X'
+              XValues.Order = loAscending
+              YValues.Name = 'Y'
+              YValues.Order = loNone
+            end
+          end
+        end
+      end
+    end
+    object TabSheetHRVTime: TTabSheet
+      Caption = '3. HRV - Time'
+      ImageIndex = 2
+      object SplitterHRVTime: TSplitter
+        Left = 693
+        Top = 0
+        Height = 675
+      end
+      object ChartTachogram: TChart
+        Left = 0
+        Top = 0
+        Width = 693
+        Height = 675
+        Title.Text.Strings = (
+          'RR Interval Tachogram')
+        View3D = False
+        Align = alLeft
+        TabOrder = 0
+        DefaultCanvas = 'TGDIPlusCanvas'
+        ColorPaletteIndex = 13
+        object SeriesTachogram: TLineSeries
+          SeriesColor = clGreen
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+      end
+      object ChartRRHistogram: TChart
+        Left = 696
+        Top = 0
+        Width = 776
+        Height = 675
+        Title.Text.Strings = (
+          'RR Histogram & TINN Visualization')
+        View3D = False
+        Align = alClient
+        TabOrder = 1
+        DefaultCanvas = 'TGDIPlusCanvas'
+        PrintMargins = (
+          15
+          10
+          15
+          10)
+        ColorPaletteIndex = 13
+        object SeriesRRHistogram: TBarSeries
+          Marks.Visible = False
+          Marks.OnTop = True
+          SeriesColor = clLime
+          Title = 'RR Distribution'
+          BarWidthPercent = 100
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Bar'
+          YValues.Order = loNone
+        end
+        object SeriesTINN: TLineSeries
+          SeriesColor = clBlack
+          Title = 'TINN Triangle q(t)'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesMeanLine: TLineSeries
+          SeriesColor = clRed
+          Title = 'Mean RR (Skewness Ref)'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+      end
+    end
+    object TabSheetHRVFreq: TTabSheet
+      Caption = '4. HRV - Freq.'
+      ImageIndex = 3
+      object SplitterHRVFreq: TSplitter
+        Left = 693
+        Top = 0
+        Height = 675
+      end
+      object ChartHRVPSD: TChart
+        Left = 0
+        Top = 0
+        Width = 693
+        Height = 675
+        Title.Text.Strings = (
+          'HRV Power Spectrum')
+        View3D = False
+        Align = alLeft
+        TabOrder = 0
+        DefaultCanvas = 'TGDIPlusCanvas'
+        ColorPaletteIndex = 13
+        object SeriesHRVPSD: TLineSeries
+          SeriesColor = clNavy
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+      end
+      object ChartVasoPSD: TChart
+        Left = 696
+        Top = 0
+        Width = 776
+        Height = 675
+        Title.Text.Strings = (
+          'PSD of Vasomotor Source')
+        View3D = False
+        Align = alClient
+        TabOrder = 1
+        DefaultCanvas = 'TGDIPlusCanvas'
+        ColorPaletteIndex = 13
+        object SeriesVasoPSD: TLineSeries
+          SeriesColor = clPurple
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+      end
+    end
+    object TabSheetHRVNonLinear: TTabSheet
+      Caption = '5. HRV - Non-Linear'
+      ImageIndex = 4
+      object ChartPoincare: TChart
+        Left = 0
+        Top = 0
+        Width = 1472
+        Height = 675
+        Title.Text.Strings = (
+          'Poincar'#233' Plot of RR Intervals')
+        View3D = False
+        Align = alClient
+        TabOrder = 0
+        DefaultCanvas = 'TGDIPlusCanvas'
+        ColorPaletteIndex = 13
+        object SeriesPoincare: TPointSeries
+          SeriesColor = clMaroon
+          ClickableLine = False
+          Pointer.HorizSize = 2
+          Pointer.InflateMargins = True
+          Pointer.Style = psCircle
+          Pointer.VertSize = 2
+          XValues.Name = 'X'
+          XValues.Order = loNone
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+      end
+    end
+    object TabSheetAutonomicBalance: TTabSheet
+      Caption = '6. Autonomic Balance'
+      ImageIndex = 5
+      object ChartAutonomicBalance: TChart
+        Left = 0
+        Top = 0
+        Width = 1472
+        Height = 675
+        Title.Text.Strings = (
+          'Autonomic Balance Diagram')
+        View3D = False
+        Align = alClient
+        TabOrder = 0
+        DefaultCanvas = 'TGDIPlusCanvas'
+        ColorPaletteIndex = 13
+        object SeriesAutonomicBalance: TPointSeries
+          SeriesColor = clRed
+          ClickableLine = False
+          Pointer.HorizSize = 8
+          Pointer.InflateMargins = True
+          Pointer.Style = psCircle
+          Pointer.VertSize = 8
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+      end
+    end
+    object TabSheetDWTCoeffs: TTabSheet
+      Caption = '7. DWT Coefficients'
+      ImageIndex = 6
+      object PageControlDWTCoeffs: TPageControl
+        Left = 0
+        Top = 0
+        Width = 1472
+        Height = 675
+        ActivePage = TabSheetQ1
+        Align = alClient
+        TabOrder = 0
+        object TabSheetQ1: TTabSheet
+          Caption = 'Q1'
+          object SplitterQ1_H1: TSplitter
+            Left = 0
+            Top = 323
+            Width = 1464
+            Height = 5
+            Cursor = crVSplit
+            Align = alTop
+            ExplicitWidth = 1384
+          end
+          object PanelQ1_1: TPanel
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 323
+            Align = alTop
+            BevelOuter = bvNone
+            TabOrder = 0
+            object SplitterQ1_V1: TSplitter
+              Left = 689
+              Top = 0
+              Height = 323
+            end
+            object ChartQ1Signal: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 323
+              Title.Text.Strings = (
+                'Q1 Signal')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ1FFT: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 323
+              Title.Text.Strings = (
+                'FFT of Q1')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+          object PanelQ1_2: TPanel
+            Left = 0
+            Top = 328
+            Width = 1464
+            Height = 317
+            Align = alClient
+            BevelOuter = bvNone
+            TabOrder = 1
+            object SplitterQ1_V2: TSplitter
+              Left = 689
+              Top = 0
+              Height = 317
+            end
+            object ChartQ1PSD: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 317
+              Title.Text.Strings = (
+                'PSD of Q1')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ1FilterResponse: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 317
+              Title.Text.Strings = (
+                'Q1 Filter Response (DS)')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+        end
+        object TabSheetQ2: TTabSheet
+          Caption = 'Q2'
+          ImageIndex = 1
+          object SplitterQ2_H1: TSplitter
+            Left = 0
+            Top = 323
+            Width = 1464
+            Height = 5
+            Cursor = crVSplit
+            Align = alTop
+            ExplicitWidth = 1384
+          end
+          object PanelQ2_1: TPanel
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 323
+            Align = alTop
+            BevelOuter = bvNone
+            TabOrder = 0
+            object SplitterQ2_V1: TSplitter
+              Left = 689
+              Top = 0
+              Height = 323
+            end
+            object ChartQ2Signal: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 323
+              Title.Text.Strings = (
+                'Q2 Signal')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ2FFT: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 323
+              Title.Text.Strings = (
+                'FFT of Q2')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+          object PanelQ2_2: TPanel
+            Left = 0
+            Top = 328
+            Width = 1464
+            Height = 317
+            Align = alClient
+            BevelOuter = bvNone
+            TabOrder = 1
+            object SplitterQ2_V2: TSplitter
+              Left = 689
+              Top = 0
+              Height = 317
+            end
+            object ChartQ2PSD: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 317
+              Title.Text.Strings = (
+                'PSD of Q2')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ2FilterResponse: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 317
+              Title.Text.Strings = (
+                'Q2 Filter Response (DS)')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+        end
+        object TabSheetQ3: TTabSheet
+          Caption = 'Q3'
+          ImageIndex = 2
+          object SplitterQ3_H1: TSplitter
+            Left = 0
+            Top = 323
+            Width = 1464
+            Height = 5
+            Cursor = crVSplit
+            Align = alTop
+            ExplicitWidth = 1384
+          end
+          object PanelQ3_1: TPanel
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 323
+            Align = alTop
+            BevelOuter = bvNone
+            TabOrder = 0
+            object SplitterQ3_V1: TSplitter
+              Left = 689
+              Top = 0
+              Height = 323
+            end
+            object ChartQ3Signal: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 323
+              Title.Text.Strings = (
+                'Q3 Signal')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ3FFT: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 323
+              Title.Text.Strings = (
+                'FFT of Q3')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+          object PanelQ3_2: TPanel
+            Left = 0
+            Top = 328
+            Width = 1464
+            Height = 317
+            Align = alClient
+            BevelOuter = bvNone
+            TabOrder = 1
+            object SplitterQ3_V2: TSplitter
+              Left = 689
+              Top = 0
+              Height = 317
+            end
+            object ChartQ3PSD: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 317
+              Title.Text.Strings = (
+                'PSD of Q3')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ3FilterResponse: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 317
+              Title.Text.Strings = (
+                'Q3 Filter Response (DS)')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+        end
+        object TabSheetQ4: TTabSheet
+          Caption = 'Q4'
+          ImageIndex = 3
+          object SplitterQ4_H1: TSplitter
+            Left = 0
+            Top = 323
+            Width = 1464
+            Height = 5
+            Cursor = crVSplit
+            Align = alTop
+            ExplicitWidth = 1384
+          end
+          object PanelQ4_1: TPanel
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 323
+            Align = alTop
+            BevelOuter = bvNone
+            TabOrder = 0
+            object SplitterQ4_V1: TSplitter
+              Left = 689
+              Top = 0
+              Height = 323
+            end
+            object ChartQ4Signal: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 323
+              Title.Text.Strings = (
+                'Q4 Signal')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ4FFT: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 323
+              Title.Text.Strings = (
+                'FFT of Q4')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+          object PanelQ4_2: TPanel
+            Left = 0
+            Top = 328
+            Width = 1464
+            Height = 317
+            Align = alClient
+            BevelOuter = bvNone
+            TabOrder = 1
+            object SplitterQ4_V2: TSplitter
+              Left = 689
+              Top = 0
+              Height = 317
+            end
+            object ChartQ4PSD: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 317
+              Title.Text.Strings = (
+                'PSD of Q4')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ4FilterResponse: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 317
+              Title.Text.Strings = (
+                'Q4 Filter Response (DS)')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+        end
+        object TabSheetQ5: TTabSheet
+          Caption = 'Q5'
+          ImageIndex = 4
+          object SplitterQ5_H1: TSplitter
+            Left = 0
+            Top = 323
+            Width = 1464
+            Height = 5
+            Cursor = crVSplit
+            Align = alTop
+            ExplicitWidth = 1384
+          end
+          object PanelQ5_1: TPanel
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 323
+            Align = alTop
+            BevelOuter = bvNone
+            TabOrder = 0
+            object SplitterQ5_V1: TSplitter
+              Left = 689
+              Top = 0
+              Height = 323
+            end
+            object ChartQ5Signal: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 323
+              Title.Text.Strings = (
+                'Q5 Signal')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ5FFT: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 323
+              Title.Text.Strings = (
+                'FFT of Q5')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+          object PanelQ5_2: TPanel
+            Left = 0
+            Top = 328
+            Width = 1464
+            Height = 317
+            Align = alClient
+            BevelOuter = bvNone
+            TabOrder = 1
+            object SplitterQ5_V2: TSplitter
+              Left = 689
+              Top = 0
+              Height = 317
+            end
+            object ChartQ5PSD: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 317
+              Title.Text.Strings = (
+                'PSD of Q5')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ5FilterResponse: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 317
+              Title.Text.Strings = (
+                'Q5 Filter Response (DS)')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+        end
+        object TabSheetQ6: TTabSheet
+          Caption = 'Q6'
+          ImageIndex = 5
+          object SplitterQ6_H1: TSplitter
+            Left = 0
+            Top = 323
+            Width = 1464
+            Height = 5
+            Cursor = crVSplit
+            Align = alTop
+            ExplicitWidth = 1384
+          end
+          object PanelQ6_1: TPanel
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 323
+            Align = alTop
+            BevelOuter = bvNone
+            TabOrder = 0
+            object SplitterQ6_V1: TSplitter
+              Left = 689
+              Top = 0
+              Height = 323
+            end
+            object ChartQ6Signal: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 323
+              Title.Text.Strings = (
+                'Q6 Signal')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ6FFT: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 323
+              Title.Text.Strings = (
+                'FFT of Q6')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+          object PanelQ6_2: TPanel
+            Left = 0
+            Top = 328
+            Width = 1464
+            Height = 317
+            Align = alClient
+            BevelOuter = bvNone
+            TabOrder = 1
+            object SplitterQ6_V2: TSplitter
+              Left = 689
+              Top = 0
+              Height = 317
+            end
+            object ChartQ6PSD: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 317
+              Title.Text.Strings = (
+                'PSD of Q6')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ6FilterResponse: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 317
+              Title.Text.Strings = (
+                'Q6 Filter Response (DS)')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+        end
+        object TabSheetQ7: TTabSheet
+          Caption = 'Q7'
+          ImageIndex = 6
+          object SplitterQ7_H1: TSplitter
+            Left = 0
+            Top = 323
+            Width = 1464
+            Height = 5
+            Cursor = crVSplit
+            Align = alTop
+            ExplicitWidth = 1384
+          end
+          object PanelQ7_1: TPanel
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 323
+            Align = alTop
+            BevelOuter = bvNone
+            TabOrder = 0
+            object SplitterQ7_V1: TSplitter
+              Left = 689
+              Top = 0
+              Height = 323
+            end
+            object ChartQ7Signal: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 323
+              Title.Text.Strings = (
+                'Q7 Signal')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ7FFT: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 323
+              Title.Text.Strings = (
+                'FFT of Q7')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+          object PanelQ7_2: TPanel
+            Left = 0
+            Top = 328
+            Width = 1464
+            Height = 317
+            Align = alClient
+            BevelOuter = bvNone
+            TabOrder = 1
+            object SplitterQ7_V2: TSplitter
+              Left = 689
+              Top = 0
+              Height = 317
+            end
+            object ChartQ7PSD: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 317
+              Title.Text.Strings = (
+                'PSD of Q7')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ7FilterResponse: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 317
+              Title.Text.Strings = (
+                'Q7 Filter Response (DS)')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+        end
+        object TabSheetQ8: TTabSheet
+          Caption = 'Q8'
+          ImageIndex = 7
+          object SplitterQ8_H1: TSplitter
+            Left = 0
+            Top = 323
+            Width = 1464
+            Height = 5
+            Cursor = crVSplit
+            Align = alTop
+            ExplicitWidth = 1384
+          end
+          object PanelQ8_1: TPanel
+            Left = 0
+            Top = 0
+            Width = 1464
+            Height = 323
+            Align = alTop
+            BevelOuter = bvNone
+            TabOrder = 0
+            object SplitterQ8_V1: TSplitter
+              Left = 689
+              Top = 0
+              Height = 323
+            end
+            object ChartQ8Signal: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 323
+              Title.Text.Strings = (
+                'Q8 Signal')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ8FFT: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 323
+              Title.Text.Strings = (
+                'FFT of Q8')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+          object PanelQ8_2: TPanel
+            Left = 0
+            Top = 328
+            Width = 1464
+            Height = 317
+            Align = alClient
+            BevelOuter = bvNone
+            TabOrder = 1
+            object SplitterQ8_V2: TSplitter
+              Left = 689
+              Top = 0
+              Height = 317
+            end
+            object ChartQ8PSD: TChart
+              Left = 0
+              Top = 0
+              Width = 689
+              Height = 317
+              Title.Text.Strings = (
+                'PSD of Q8')
+              View3D = False
+              Align = alLeft
+              TabOrder = 0
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+            object ChartQ8FilterResponse: TChart
+              Left = 692
+              Top = 0
+              Width = 772
+              Height = 317
+              Title.Text.Strings = (
+                'Q8 Filter Response (DS)')
+              View3D = False
+              Align = alClient
+              TabOrder = 1
+              DefaultCanvas = 'TGDIPlusCanvas'
+              ColorPaletteIndex = 13
+            end
+          end
+        end
+      end
+    end
+    object TabSheetDWTGlobalResponse: TTabSheet
+      Caption = '8. DWT Freq. Response'
+      ImageIndex = 7
+      object SplitterDWTGlobal: TSplitter
+        Left = 693
+        Top = 0
+        Height = 675
+      end
+      object ChartDWTResponseOrigFS: TChart
+        Left = 0
+        Top = 0
+        Width = 693
+        Height = 675
+        Legend.Alignment = laTop
+        Title.Text.Strings = (
+          'Filter Response @ Original FS')
+        View3D = False
+        Align = alLeft
+        TabOrder = 0
+        DefaultCanvas = 'TGDIPlusCanvas'
+        ColorPaletteIndex = 13
+        object SeriesQ1Orig: TLineSeries
+          Title = 'Q1'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ2Orig: TLineSeries
+          Title = 'Q2'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ3Orig: TLineSeries
+          Title = 'Q3'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ4Orig: TLineSeries
+          Title = 'Q4'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ5Orig: TLineSeries
+          Title = 'Q5'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ6Orig: TLineSeries
+          Title = 'Q6'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ7Orig: TLineSeries
+          Title = 'Q7'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ8Orig: TLineSeries
+          Title = 'Q8'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+      end
+      object ChartDWTResponseDownsampledFS: TChart
+        Left = 696
+        Top = 0
+        Width = 776
+        Height = 675
+        Legend.Alignment = laTop
+        Title.Text.Strings = (
+          'Filter Response @ Downsampled FS')
+        View3D = False
+        Align = alClient
+        TabOrder = 1
+        DefaultCanvas = 'TGDIPlusCanvas'
+        ColorPaletteIndex = 13
+        object SeriesQ1DS: TLineSeries
+          Title = 'Q1'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ2DS: TLineSeries
+          Title = 'Q2'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ3DS: TLineSeries
+          Title = 'Q3'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ4DS: TLineSeries
+          Title = 'Q4'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ5DS: TLineSeries
+          Title = 'Q5'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ6DS: TLineSeries
+          Title = 'Q6'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ7DS: TLineSeries
+          Title = 'Q7'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+        object SeriesQ8DS: TLineSeries
+          Title = 'Q8'
+          Brush.BackColor = clDefault
+          Pointer.InflateMargins = True
+          Pointer.Style = psRectangle
+          XValues.Name = 'X'
+          XValues.Order = loAscending
+          YValues.Name = 'Y'
+          YValues.Order = loNone
+        end
+      end
+    end
+    object TabSheetResults: TTabSheet
+      Caption = '9. HRV Results'
+      ImageIndex = 8
+      object Panel1: TPanel
+        Left = 0
+        Top = 0
+        Width = 1472
+        Height = 350
+        Align = alTop
+        TabOrder = 0
+        object GroupBoxTime: TGroupBox
+          Left = 16
+          Top = 8
+          Width = 433
+          Height = 337
+          Caption = ' Time Domain '
+          TabOrder = 0
+          object LabelMeanHR: TLabel
+            Left = 16
+            Top = 24
+            Width = 88
+            Height = 15
+            Caption = 'Mean HR (bpm):'
+          end
+          object LabelSDNN: TLabel
+            Left = 16
+            Top = 48
+            Width = 62
+            Height = 15
+            Caption = 'SDNN (ms):'
+          end
+          object LabelRMSSD: TLabel
+            Left = 16
+            Top = 72
+            Width = 68
+            Height = 15
+            Caption = 'RMSSD (ms):'
+          end
+          object LabelpNN50: TLabel
+            Left = 16
+            Top = 168
+            Width = 61
+            Height = 15
+            Caption = 'pNN50 (%):'
+          end
+          object LabelSDANN: TLabel
+            Left = 16
+            Top = 96
+            Width = 108
+            Height = 15
+            Caption = 'SDANN (5min) (ms):'
+          end
+          object LabelSDNNIdx: TLabel
+            Left = 16
+            Top = 120
+            Width = 131
+            Height = 15
+            Caption = 'SDNN Index (5min) (ms):'
+          end
+          object LabelSDSD: TLabel
+            Left = 16
+            Top = 144
+            Width = 58
+            Height = 15
+            Caption = 'SDSD (ms):'
+          end
+          object LabelNN50: TLabel
+            Left = 16
+            Top = 192
+            Width = 33
+            Height = 15
+            Caption = 'NN50:'
+          end
+          object LabelHTI: TLabel
+            Left = 16
+            Top = 216
+            Width = 103
+            Height = 15
+            Caption = 'HRV Tri Index (HTI):'
+          end
+          object LabelTINN: TLabel
+            Left = 16
+            Top = 240
+            Width = 58
+            Height = 15
+            Caption = 'TINN (ms):'
+          end
+          object LabelCVNN: TLabel
+            Left = 16
+            Top = 264
+            Width = 36
+            Height = 15
+            Caption = 'CVNN:'
+          end
+          object LabelCVSD: TLabel
+            Left = 16
+            Top = 288
+            Width = 32
+            Height = 15
+            Caption = 'CVSD:'
+          end
+          object LabelSkew: TLabel
+            Left = 16
+            Top = 312
+            Width = 88
+            Height = 15
+            Caption = 'Skewness of NN:'
+          end
+          object edtMeanHR: TEdit
+            Left = 200
+            Top = 21
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 0
+          end
+          object edtSDNN: TEdit
+            Left = 200
+            Top = 45
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 1
+          end
+          object edtRMSSD: TEdit
+            Left = 200
+            Top = 69
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 2
+          end
+          object edtpNN50: TEdit
+            Left = 200
+            Top = 165
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 6
+          end
+          object edtSDANN: TEdit
+            Left = 200
+            Top = 93
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 3
+          end
+          object edtSDNNIndex: TEdit
+            Left = 200
+            Top = 117
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 4
+          end
+          object edtSDSD: TEdit
+            Left = 200
+            Top = 141
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 5
+          end
+          object edtNN50: TEdit
+            Left = 200
+            Top = 189
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 7
+          end
+          object edtHTI: TEdit
+            Left = 200
+            Top = 213
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 8
+          end
+          object edtTINN: TEdit
+            Left = 200
+            Top = 237
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 9
+          end
+          object edtCVNN: TEdit
+            Left = 200
+            Top = 261
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 10
+          end
+          object edtCVSD: TEdit
+            Left = 200
+            Top = 285
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 11
+          end
+          object edtSkewness: TEdit
+            Left = 200
+            Top = 309
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 12
+          end
+        end
+        object GroupBoxFreq: TGroupBox
+          Left = 464
+          Top = 8
+          Width = 433
+          Height = 337
+          Caption = ' Frequency Domain '
+          TabOrder = 1
+          object LabelTotalPower: TLabel
+            Left = 16
+            Top = 24
+            Width = 96
+            Height = 15
+            Caption = 'Total Power (ms'#178'):'
+          end
+          object LabelLFPower: TLabel
+            Left = 16
+            Top = 48
+            Width = 125
+            Height = 15
+            Caption = 'Total Power of LF (ms'#178'):'
+          end
+          object LabelHFPower: TLabel
+            Left = 16
+            Top = 72
+            Width = 128
+            Height = 15
+            Caption = 'Total Power of HF (ms'#178'):'
+          end
+          object LabelLFHF: TLabel
+            Left = 16
+            Top = 96
+            Width = 65
+            Height = 15
+            Caption = 'LF/HF Ratio:'
+          end
+          object LabelLFNu: TLabel
+            Left = 16
+            Top = 120
+            Width = 46
+            Height = 15
+            Caption = 'LF (n.u.):'
+          end
+          object LabelHFNu: TLabel
+            Left = 16
+            Top = 144
+            Width = 49
+            Height = 15
+            Caption = 'HF (n.u.):'
+          end
+          object LabelPeakLF: TLabel
+            Left = 16
+            Top = 168
+            Width = 140
+            Height = 15
+            Caption = 'Peak Frequency of LF (Hz):'
+          end
+          object LabelPeakHF: TLabel
+            Left = 16
+            Top = 192
+            Width = 143
+            Height = 15
+            Caption = 'Peak Frequency of HF (Hz):'
+          end
+          object edtTotalPower: TEdit
+            Left = 200
+            Top = 21
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 0
+          end
+          object edtLFPower: TEdit
+            Left = 200
+            Top = 45
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 1
+          end
+          object edtHFPower: TEdit
+            Left = 200
+            Top = 69
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 2
+          end
+          object edtLFHF: TEdit
+            Left = 200
+            Top = 93
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 3
+          end
+          object edtLFNu: TEdit
+            Left = 200
+            Top = 117
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 4
+          end
+          object edtHFNu: TEdit
+            Left = 200
+            Top = 141
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 5
+          end
+          object edtPeakLF: TEdit
+            Left = 200
+            Top = 165
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 6
+          end
+          object edtPeakHF: TEdit
+            Left = 200
+            Top = 189
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 7
+          end
+        end
+        object GroupBoxNonlinear: TGroupBox
+          Left = 912
+          Top = 8
+          Width = 433
+          Height = 337
+          Caption = ' Non-Linear (Poincar'#233') '
+          TabOrder = 2
+          object LabelSD1: TLabel
+            Left = 16
+            Top = 24
+            Width = 50
+            Height = 15
+            Caption = 'SD1 (ms):'
+          end
+          object LabelSD2: TLabel
+            Left = 16
+            Top = 48
+            Width = 50
+            Height = 15
+            Caption = 'SD2 (ms):'
+          end
+          object LabelSD1SD2: TLabel
+            Left = 16
+            Top = 72
+            Width = 78
+            Height = 15
+            Caption = 'SD1/SD2 Ratio:'
+          end
+          object edtSD1: TEdit
+            Left = 200
+            Top = 21
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 0
+          end
+          object edtSD2: TEdit
+            Left = 200
+            Top = 45
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 1
+          end
+          object edtSD1SD2: TEdit
+            Left = 200
+            Top = 69
+            Width = 217
+            Height = 23
+            ReadOnly = True
+            TabOrder = 2
+          end
+        end
+      end
+    end
+  end
+  object OpenDialogPPG: TOpenDialog
+    Filter = 'CSV Files (*.csv)|*.csv|All files (*.*)|*.*'
+    Title = 'Open PPG Signal File'
+    Left = 288
+    Top = 8
+  end
+end

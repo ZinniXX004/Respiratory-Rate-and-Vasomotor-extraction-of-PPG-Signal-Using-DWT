@@ -1,0 +1,1560 @@
+unit PPGAnalyzer;
+
+interface
+
+uses
+  System.SysUtils, System.Math, System.Generics.Collections, System.Types, System.Generics.Defaults;
+
+type
+  TSignalArray = TArray<Double>;
+
+  TComplex = record
+    Re: Double;
+    Im: Double;
+  end;
+
+  TComplexArray = TArray<TComplex>;
+  TConvolutionMode = (cmFull, cmSame, cmValid);
+
+  TTimeDomainFeatures = record
+    MeanHR: Double;
+    SDNN: Double;
+    SDANN: Double;
+    SDNNIndex: Double;
+    RMSSD: Double;
+    SDSD: Double;
+    NN50: Integer;
+    pNN50: Double;
+    HTI: Double;
+    TINN: Double;
+    CVNN: Double;
+    CVSD: Double;
+    Skewness: Double;
+    RRHistogramCounts: TArray<Integer>;
+    RRHistogramBins: TSignalArray;
+    TINN_N: Double;     // Titik awal alas segitiga
+    TINN_M: Double;     // Titik akhir alas segitiga
+    TINN_Mode: Double;  // Titik puncak X (Modus)
+    TINN_Height: Double;// Tinggi puncak Y (Max Count)
+  end;
+
+  TFrequencyDomainFeatures = record
+    PSD_Freqs: TSignalArray;
+    PSD_Values: TSignalArray;
+    Total_Power: Double;
+    VLF_Power: Double;
+    LF_Power: Double;
+    HF_Power: Double;
+    LF_HF_Ratio: Double;
+    LF_nu: Double;
+    HF_nu: Double;
+    Peak_LF: Double;
+    Peak_HF: Double;
+  end;
+
+  TNonLinearFeatures = record
+    PoincareX: TSignalArray;
+    PoincareY: TSignalArray;
+    SD1: Double;
+    SD2: Double;
+    SD1_SD2_Ratio: Double;
+  end;
+
+  TPPGAnalyzer = class
+  private
+    FQjTimeCoeffs: TDictionary<Integer, TDictionary<Integer, Double>>;
+    function Mean(const Arr: TSignalArray): Double;
+    function StdDev(const Arr: TSignalArray): Double;
+    function SumOfSquares(const Arr: TSignalArray): Double;
+    function DiracDelta(k: Integer): Integer;
+    procedure _InitializeQjTimeCoeffs;
+    function Convolve(const Signal, Kernel: TSignalArray; Mode: TConvolutionMode = cmSame): TSignalArray;
+    function Filter_CustomRef(const Signal: TSignalArray; Fs, LowCutoff, HighCutoff: Double): TSignalArray;
+    procedure LinearDetrend(var Signal: TSignalArray);
+    procedure FFT(const Input: TSignalArray; out Output: TComplexArray);
+    function ManualFindPeaks(const x: TSignalArray; MinDistance, MinHeight, MinProminence: Double): TArray<Integer>;
+    function CubicSplineInterpolate(const X, Y: TSignalArray; const Xi: TSignalArray): TSignalArray;
+
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure Downsample(const SignalIn, TimeIn: TSignalArray; Factor: Integer;
+      out SignalOut, TimeOut: TSignalArray; out NewFs: Double);
+    procedure FFTMagnitudeAndFrequencies(const Signal: TSignalArray; Fs: Double; out Freqs, Mags: TSignalArray);
+    function PreprocessSignal(const Signal: TSignalArray; Fs: Double): TSignalArray;
+    function Decompose_DWT(const Signal: TSignalArray): TDictionary<Integer, TSignalArray>;
+    procedure AnalyzeSignalZeroCrossing(const Signal, Time: TSignalArray;
+      out MaximaIdx, MinimaIdx, ZeroCrossIdx: TArray<Integer>;
+      out ZeroLineVal: Double);
+    procedure Welch(const Signal: TSignalArray; Fs: Double; out Freqs, Psd: TSignalArray;
+      SegmentLen: Integer = 256; OverlapRatio: Double = 0.5);
+    function ExtractRateFromSignal(const Signal: TSignalArray; Fs: Double; FreqBandLow, FreqBandHigh: Double): Double;
+    function CalculateQJFrequencyResponses(Fs: Double): TDictionary<Integer, TPair<TSignalArray, TSignalArray>>;
+    function CalculateTimeDomain(const RRIntervals: TSignalArray; const PeakTimes: TSignalArray): TTimeDomainFeatures;
+    function CalculateFrequencyDomain(const RRIntervals, PeakTimes: TSignalArray; InterpFs: Double = 4.0): TFrequencyDomainFeatures;
+    function CalculateNonLinear(const RRIntervals: TSignalArray): TNonLinearFeatures;
+  end;
+
+implementation
+
+function Cmplx(const R, I: Double): TComplex;
+begin
+  Result.Re := R;
+  Result.Im := I;
+end;
+
+{==============================================================================}
+{                         TPPGAnalyzer Implementation                        }
+{==============================================================================}
+
+constructor TPPGAnalyzer.Create;
+begin
+  inherited Create;
+  Randomize;
+  FQjTimeCoeffs := TDictionary<Integer, TDictionary<Integer, Double>>.Create;
+  _InitializeQjTimeCoeffs;
+end;
+
+destructor TPPGAnalyzer.Destroy;
+var
+  i: Integer;
+begin
+  for i in FQjTimeCoeffs.Keys do
+    FQjTimeCoeffs[i].Free;
+  FQjTimeCoeffs.Free;
+  inherited Destroy;
+end;
+
+{------------------------------------------------------------------------------}
+{                Fungsi Matematika & Statistik Dasar                           }
+{------------------------------------------------------------------------------}
+function TPPGAnalyzer.Mean(const Arr: TSignalArray): Double;
+var i: Integer; sum: Double;
+begin
+  sum := 0.0;
+  if Length(Arr) > 0 then
+  begin
+    for i := 0 to High(Arr) do sum := sum + Arr[i];
+    Result := sum / Length(Arr);
+  end else Result := 0;
+end;
+
+function TPPGAnalyzer.StdDev(const Arr: TSignalArray): Double;
+var i: Integer; m, variance: Double;
+begin
+ m := Mean(Arr); variance := 0.0;
+ if Length(Arr) > 1 then
+ begin
+   for i := 0 to High(Arr) do variance := variance + Sqr(Arr[i] - m);
+   Result := Sqrt(variance / (Length(Arr) - 1));
+ end else Result := 0;
+end;
+
+function TPPGAnalyzer.SumOfSquares(const Arr: TSignalArray): Double;
+var i: integer; sum: double;
+begin
+  sum := 0;
+  for i := 0 to High(Arr) do sum := sum + Sqr(Arr[i]);
+  Result := sum;
+end;
+
+function TPPGAnalyzer.DiracDelta(k: Integer): Integer;
+begin
+  if k = 0 then Result := 1 else Result := 0;
+end;
+
+{------------------------------------------------------------------------------}
+{                        Fungsi Inti DWT dan Filtering                         }
+{------------------------------------------------------------------------------}
+// NOTE: This is a direct, albeit verbose, translation of the Python reference's hard-coded filters.
+procedure TPPGAnalyzer._InitializeQjTimeCoeffs;
+var
+  j, k, start_k, end_k: Integer;
+  filter_dict: TDictionary<Integer, Double>;
+begin
+  for j := 1 to 8 do
+  begin
+    filter_dict := TDictionary<Integer, Double>.Create;
+    FQjTimeCoeffs.Add(j, filter_dict);
+
+    start_k := -(Round(Power(2, j)) + Round(Power(2, j - 1)) - 2);
+    end_k := (1 - Round(Power(2, j - 1))) + 1;
+
+    case j of
+      1: for k := start_k to end_k do filter_dict.Add(k, -2 * (DiracDelta(k) - DiracDelta(k + 1)));
+      2: for k := start_k to end_k do filter_dict.Add(k, -1/4 * (DiracDelta(k-1) + 3*DiracDelta(k) + 2*DiracDelta(k+1) - 2*DiracDelta(k+2) - 3*DiracDelta(k+3) - DiracDelta(k+4)));
+      3: for k := start_k to end_k do filter_dict.Add(k, -1/32 * (DiracDelta(k-3) + 3*DiracDelta(k-2) + 6*DiracDelta(k-1) + 10*DiracDelta(k) + 11*DiracDelta(k+1) + 9*DiracDelta(k+2) + 4*DiracDelta(k+3) - 4*DiracDelta(k+4) - 9*DiracDelta(k+5) - 11*DiracDelta(k+6) - 10*DiracDelta(k+7) - 6*DiracDelta(k+8) - 3*DiracDelta(k+9) - DiracDelta(k+10)));
+      4: for k := start_k to end_k do filter_dict.Add(k, -1/256 * (DiracDelta(k-7) + 3*DiracDelta(k-6) + 6*DiracDelta(k-5) + 10*DiracDelta(k-4) + 15*DiracDelta(k-3) + 21*DiracDelta(k-2) + 28*DiracDelta(k-1) + 36*DiracDelta(k) + 41*DiracDelta(k+1) + 43*DiracDelta(k+2) + 42*DiracDelta(k+3) + 38*DiracDelta(k+4) + 31*DiracDelta(k+5) + 21*DiracDelta(k+6) + 8*DiracDelta(k+7) - 8*DiracDelta(k+8) - 21*DiracDelta(k+9) - 31*DiracDelta(k+10) - 38*DiracDelta(k+11) - 42*DiracDelta(k+12) - 43*DiracDelta(k+13) - 41*DiracDelta(k+14) - 36*DiracDelta(k+15) - 28*DiracDelta(k+16) - 21*DiracDelta(k+17) - 15*DiracDelta(k+18) - 10*DiracDelta(k+19) - 6*DiracDelta(k+20) - 3*DiracDelta(k+21) - DiracDelta(k+22)));
+      5: for k := start_k to end_k do filter_dict.Add(k, -1/2048 * (
+            DiracDelta(k-15) + 3*DiracDelta(k-14) + 6*DiracDelta(k-13) + 10*DiracDelta(k-12) + 15*DiracDelta(k-11) +
+            21*DiracDelta(k-10) + 28*DiracDelta(k-9) + 36*DiracDelta(k-8) + 45*DiracDelta(k-7) + 55*DiracDelta(k-6) +
+            66*DiracDelta(k-5) + 78*DiracDelta(k-4) + 91*DiracDelta(k-3) + 105*DiracDelta(k-2) + 120*DiracDelta(k-1) +
+            136*DiracDelta(k) + 149*DiracDelta(k+1) + 159*DiracDelta(k+2) + 166*DiracDelta(k+3) + 170*DiracDelta(k+4) +
+            171*DiracDelta(k+5) + 169*DiracDelta(k+6) + 164*DiracDelta(k+7) + 156*DiracDelta(k+8) + 145*DiracDelta(k+9) +
+            131*DiracDelta(k+10) + 114*DiracDelta(k+11) + 94*DiracDelta(k+12) + 71*DiracDelta(k+13) + 45*DiracDelta(k+14) +
+            16*DiracDelta(k+15) - 16*DiracDelta(k+16) - 45*DiracDelta(k+17) - 71*DiracDelta(k+18) - 94*DiracDelta(k+19) -
+            114*DiracDelta(k+20) - 131*DiracDelta(k+21) - 145*DiracDelta(k+22) - 156*DiracDelta(k+23) - 164*DiracDelta(k+24) -
+            169*DiracDelta(k+25) - 171*DiracDelta(k+26) - 170*DiracDelta(k+27) - 166*DiracDelta(k+28) - 159*DiracDelta(k+29) -
+            149*DiracDelta(k+30) - 136*DiracDelta(k+31) - 120*DiracDelta(k+32) - 105*DiracDelta(k+33) - 91*DiracDelta(k+34) -
+            78*DiracDelta(k+35) - 66*DiracDelta(k+36) - 55*DiracDelta(k+37) - 45*DiracDelta(k+38) - 36*DiracDelta(k+39) -
+            28*DiracDelta(k+40) - 21*DiracDelta(k+41) - 15*DiracDelta(k+42) - 10*DiracDelta(k+43) - 6*DiracDelta(k+44) -
+            3*DiracDelta(k+45) - DiracDelta(k+46)
+            ));
+       6: for k := start_k to end_k do filter_dict.Add(k, -1/16384 * (
+            DiracDelta(k-31) + 3*DiracDelta(k-30) + 6*DiracDelta(k-29) + 10*DiracDelta(k-28) + 15*DiracDelta(k-27) +
+            21*DiracDelta(k-26) + 28*DiracDelta(k-25) + 36*DiracDelta(k-24) + 45*DiracDelta(k-23) + 55*DiracDelta(k-22) +
+            66*DiracDelta(k-21) + 78*DiracDelta(k-20) + 91*DiracDelta(k-19) + 105*DiracDelta(k-18) + 120*DiracDelta(k-17) +
+            136*DiracDelta(k-16) + 153*DiracDelta(k-15) + 171*DiracDelta(k-14) + 190*DiracDelta(k-13) + 210*DiracDelta(k-12) +
+            231*DiracDelta(k-11) + 253*DiracDelta(k-10) + 276*DiracDelta(k-9) + 300*DiracDelta(k-8) + 325*DiracDelta(k-7) +
+            351*DiracDelta(k-6) + 378*DiracDelta(k-5) + 406*DiracDelta(k-4) + 435*DiracDelta(k-3) + 465*DiracDelta(k-2) +
+            496*DiracDelta(k-1) + 528*DiracDelta(k) + 557*DiracDelta(k+1) + 583*DiracDelta(k+2) + 606*DiracDelta(k+3) +
+            626*DiracDelta(k+4) + 643*DiracDelta(k+5) + 657*DiracDelta(k+6) + 668*DiracDelta(k+7) + 676*DiracDelta(k+8) +
+            681*DiracDelta(k+9) + 683*DiracDelta(k+10) + 682*DiracDelta(k+11) + 678*DiracDelta(k+12) + 671*DiracDelta(k+13) +
+            661*DiracDelta(k+14) + 648*DiracDelta(k+15) + 632*DiracDelta(k+16) + 613*DiracDelta(k+17) + 591*DiracDelta(k+18) +
+            566*DiracDelta(k+19) + 538*DiracDelta(k+20) + 507*DiracDelta(k+21) + 473*DiracDelta(k+22) + 436*DiracDelta(k+23) +
+            396*DiracDelta(k+24) + 353*DiracDelta(k+25) + 307*DiracDelta(k+26) + 258*DiracDelta(k+27) + 206*DiracDelta(k+28) +
+            151*DiracDelta(k+29) + 93*DiracDelta(k+30) + 32*DiracDelta(k+31) - 32*DiracDelta(k+32) - 93*DiracDelta(k+33) -
+            151*DiracDelta(k+34) - 206*DiracDelta(k+35) - 258*DiracDelta(k+36) - 307*DiracDelta(k+37) - 353*DiracDelta(k+38) -
+            396*DiracDelta(k+39) - 436*DiracDelta(k+40) - 473*DiracDelta(k+41) - 507*DiracDelta(k+42) - 538*DiracDelta(k+43) -
+            566*DiracDelta(k+44) - 591*DiracDelta(k+45) - 613*DiracDelta(k+46) - 632*DiracDelta(k+47) - 648*DiracDelta(k+48) -
+            661*DiracDelta(k+49) - 671*DiracDelta(k+50) - 678*DiracDelta(k+51) - 682*DiracDelta(k+52) - 683*DiracDelta(k+53) -
+            681*DiracDelta(k+54) - 676*DiracDelta(k+55) - 668*DiracDelta(k+56) - 657*DiracDelta(k+57) - 643*DiracDelta(k+58) -
+            626*DiracDelta(k+59) - 606*DiracDelta(k+60) - 583*DiracDelta(k+61) - 557*DiracDelta(k+62) - 528*DiracDelta(k+63) -
+            496*DiracDelta(k+64) - 465*DiracDelta(k+65) - 435*DiracDelta(k+66) - 406*DiracDelta(k+67) - 378*DiracDelta(k+68) -
+            351*DiracDelta(k+69) - 325*DiracDelta(k+70) - 300*DiracDelta(k+71) - 276*DiracDelta(k+72) - 253*DiracDelta(k+73) -
+            231*DiracDelta(k+74) - 210*DiracDelta(k+75) - 190*DiracDelta(k+76) - 171*DiracDelta(k+77) - 153*DiracDelta(k+78) -
+            136*DiracDelta(k+79) - 120*DiracDelta(k+80) - 105*DiracDelta(k+81) - 91*DiracDelta(k+82) - 78*DiracDelta(k+83) -
+            66*DiracDelta(k+84) - 55*DiracDelta(k+85) - 45*DiracDelta(k+86) - 36*DiracDelta(k+87) - 28*DiracDelta(k+88) -
+            21*DiracDelta(k+89) - 15*DiracDelta(k+90) - 10*DiracDelta(k+91) - 6*DiracDelta(k+92) - 3*DiracDelta(k+93) -
+            DiracDelta(k+94)
+            ));
+       7: for k := start_k to end_k do filter_dict.Add(k, -1/131072 * (
+            DiracDelta(k-63) + 3*DiracDelta(k-62) + 6*DiracDelta(k-61) + 10*DiracDelta(k-60) + 15*DiracDelta(k-59) +
+            21*DiracDelta(k-58) + 28*DiracDelta(k-57) + 36*DiracDelta(k-56) + 45*DiracDelta(k-55) + 55*DiracDelta(k-54) +
+            66*DiracDelta(k-53) + 78*DiracDelta(k-52) + 91*DiracDelta(k-51) + 105*DiracDelta(k-50) + 120*DiracDelta(k-49) +
+            136*DiracDelta(k-48) + 153*DiracDelta(k-47) + 171*DiracDelta(k-46) + 190*DiracDelta(k-45) + 210*DiracDelta(k-44) +
+            231*DiracDelta(k-43) + 253*DiracDelta(k-42) + 276*DiracDelta(k-41) + 300*DiracDelta(k-40) + 325*DiracDelta(k-39) +
+            351*DiracDelta(k-38) + 378*DiracDelta(k-37) + 406*DiracDelta(k-36) + 435*DiracDelta(k-35) + 465*DiracDelta(k-34) +
+            496*DiracDelta(k-33) + 528*DiracDelta(k-32) + 561*DiracDelta(k-31) + 595*DiracDelta(k-30) + 630*DiracDelta(k-29) +
+            666*DiracDelta(k-28) + 703*DiracDelta(k-27) + 741*DiracDelta(k-26) + 780*DiracDelta(k-25) + 820*DiracDelta(k-24) +
+            861*DiracDelta(k-23) + 903*DiracDelta(k-22) + 946*DiracDelta(k-21) + 990*DiracDelta(k-20) + 1035*DiracDelta(k-19) +
+            1081*DiracDelta(k-18) + 1128*DiracDelta(k-17) + 1176*DiracDelta(k-16) + 1225*DiracDelta(k-15) + 1275*DiracDelta(k-14) +
+            1326*DiracDelta(k-13) + 1378*DiracDelta(k-12) + 1431*DiracDelta(k-11) + 1485*DiracDelta(k-10) + 1540*DiracDelta(k-9) +
+            1596*DiracDelta(k-8) + 1653*DiracDelta(k-7) + 1711*DiracDelta(k-6) + 1770*DiracDelta(k-5) + 1830*DiracDelta(k-4) +
+            1891*DiracDelta(k-3) + 1953*DiracDelta(k-2) + 2016*DiracDelta(k-1) + 2080*DiracDelta(k) + 2141*DiracDelta(k+1) +
+            2199*DiracDelta(k+2) + 2254*DiracDelta(k+3) + 2306*DiracDelta(k+4) + 2355*DiracDelta(k+5) + 2401*DiracDelta(k+6) +
+            2444*DiracDelta(k+7) + 2484*DiracDelta(k+8) + 2521*DiracDelta(k+9) + 2555*DiracDelta(k+10) + 2586*DiracDelta(k+11) +
+            2614*DiracDelta(k+12) + 2639*DiracDelta(k+13) + 2661*DiracDelta(k+14) + 2680*DiracDelta(k+15) + 2696*DiracDelta(k+16) +
+            2709*DiracDelta(k+17) + 2719*DiracDelta(k+18) + 2726*DiracDelta(k+19) + 2730*DiracDelta(k+20) + 2731*DiracDelta(k+21) +
+            2729*DiracDelta(k+22) + 2724*DiracDelta(k+23) + 2716*DiracDelta(k+24) + 2705*DiracDelta(k+25) + 2691*DiracDelta(k+26) +
+            2674*DiracDelta(k+27) + 2654*DiracDelta(k+28) + 2631*DiracDelta(k+29) + 2605*DiracDelta(k+30) + 2576*DiracDelta(k+31) +
+            2544*DiracDelta(k+32) + 2509*DiracDelta(k+33) + 2471*DiracDelta(k+34) + 2430*DiracDelta(k+35) + 2386*DiracDelta(k+36) +
+            2339*DiracDelta(k+37) + 2289*DiracDelta(k+38) + 2236*DiracDelta(k+39) + 2180*DiracDelta(k+40) + 2121*DiracDelta(k+41) +
+            2059*DiracDelta(k+42) + 1994*DiracDelta(k+43) + 1926*DiracDelta(k+44) + 1855*DiracDelta(k+45) + 1781*DiracDelta(k+46) +
+            1704*DiracDelta(k+47) + 1624*DiracDelta(k+48) + 1541*DiracDelta(k+49) + 1455*DiracDelta(k+50) + 1366*DiracDelta(k+51) +
+            1274*DiracDelta(k+52) + 1179*DiracDelta(k+53) + 1081*DiracDelta(k+54) + 980*DiracDelta(k+55) + 876*DiracDelta(k+56) +
+            769*DiracDelta(k+57) + 659*DiracDelta(k+58) + 546*DiracDelta(k+59) + 430*DiracDelta(k+60) + 311*DiracDelta(k+61) +
+            189*DiracDelta(k+62) + 64*DiracDelta(k+63) - 64*DiracDelta(k+64) - 189*DiracDelta(k+65) - 311*DiracDelta(k+66) -
+            430*DiracDelta(k+67) - 546*DiracDelta(k+68) - 659*DiracDelta(k+69) - 769*DiracDelta(k+70) - 876*DiracDelta(k+71) -
+            980*DiracDelta(k+72) - 1081*DiracDelta(k+73) - 1179*DiracDelta(k+74) - 1274*DiracDelta(k+75) - 1366*DiracDelta(k+76) -
+            1455*DiracDelta(k+77) - 1541*DiracDelta(k+78) - 1624*DiracDelta(k+79) - 1704*DiracDelta(k+80) - 1781*DiracDelta(k+81) -
+            1855*DiracDelta(k+82) - 1926*DiracDelta(k+83) - 1994*DiracDelta(k+84) - 2059*DiracDelta(k+85) - 2121*DiracDelta(k+86) -
+            2180*DiracDelta(k+87) - 2236*DiracDelta(k+88) - 2289*DiracDelta(k+89) - 2339*DiracDelta(k+90) - 2386*DiracDelta(k+91) -
+            2430*DiracDelta(k+92) - 2471*DiracDelta(k+93) - 2509*DiracDelta(k+94) - 2544*DiracDelta(k+95) - 2576*DiracDelta(k+96) -
+            2605*DiracDelta(k+97) - 2631*DiracDelta(k+98) - 2654*DiracDelta(k+99) - 2674*DiracDelta(k+100) - 2691*DiracDelta(k+101) -
+            2705*DiracDelta(k+102) - 2716*DiracDelta(k+103) - 2724*DiracDelta(k+104) - 2729*DiracDelta(k+105) - 2731*DiracDelta(k+106) -
+            2730*DiracDelta(k+107) - 2726*DiracDelta(k+108) - 2719*DiracDelta(k+109) - 2709*DiracDelta(k+110) - 2696*DiracDelta(k+111) -
+            2680*DiracDelta(k+112) - 2661*DiracDelta(k+113) - 2639*DiracDelta(k+114) - 2614*DiracDelta(k+115) - 2586*DiracDelta(k+116) -
+            2555*DiracDelta(k+117) - 2521*DiracDelta(k+118) - 2484*DiracDelta(k+119) - 2444*DiracDelta(k+120) - 2401*DiracDelta(k+121) -
+            2355*DiracDelta(k+122) - 2306*DiracDelta(k+123) - 2254*DiracDelta(k+124) - 2199*DiracDelta(k+125) - 2141*DiracDelta(k+126) -
+            2080*DiracDelta(k+127) - 2016*DiracDelta(k+128) - 1953*DiracDelta(k+129) - 1891*DiracDelta(k+130) - 1830*DiracDelta(k+131) -
+            1770*DiracDelta(k+132) - 1711*DiracDelta(k+133) - 1653*DiracDelta(k+134) - 1596*DiracDelta(k+135) - 1540*DiracDelta(k+136) -
+            1485*DiracDelta(k+137) - 1431*DiracDelta(k+138) - 1378*DiracDelta(k+139) - 1326*DiracDelta(k+140) - 1275*DiracDelta(k+141) -
+            1225*DiracDelta(k+142) - 1176*DiracDelta(k+143) - 1128*DiracDelta(k+144) - 1081*DiracDelta(k+145) - 1035*DiracDelta(k+146) -
+            990*DiracDelta(k+147) - 946*DiracDelta(k+148) - 903*DiracDelta(k+149) - 861*DiracDelta(k+150) - 820*DiracDelta(k+151) -
+            780*DiracDelta(k+152) - 741*DiracDelta(k+153) - 703*DiracDelta(k+154) - 666*DiracDelta(k+155) - 630*DiracDelta(k+156) -
+            595*DiracDelta(k+157) - 561*DiracDelta(k+158) - 528*DiracDelta(k+159) - 496*DiracDelta(k+160) - 465*DiracDelta(k+161) -
+            435*DiracDelta(k+162) - 406*DiracDelta(k+163) - 378*DiracDelta(k+164) - 351*DiracDelta(k+165) - 325*DiracDelta(k+166) -
+            300*DiracDelta(k+167) - 276*DiracDelta(k+168) - 253*DiracDelta(k+169) - 231*DiracDelta(k+170) - 210*DiracDelta(k+171) -
+            190*DiracDelta(k+172) - 171*DiracDelta(k+173) - 153*DiracDelta(k+174) - 136*DiracDelta(k+175) - 120*DiracDelta(k+176) -
+            105*DiracDelta(k+177) - 91*DiracDelta(k+178) - 78*DiracDelta(k+179) - 66*DiracDelta(k+180) - 55*DiracDelta(k+181) -
+            45*DiracDelta(k+182) - 36*DiracDelta(k+183) - 28*DiracDelta(k+184) - 21*DiracDelta(k+185) - 15*DiracDelta(k+186) -
+            10*DiracDelta(k+187) - 6*DiracDelta(k+188) - 3*DiracDelta(k+189) - DiracDelta(k+190)
+            ));
+       8: for k := start_k to end_k do filter_dict.Add(k, -1/1048576 * (
+            DiracDelta(k-127) + 3*DiracDelta(k-126) + 6*DiracDelta(k-125) + 10*DiracDelta(k-124) + 15*DiracDelta(k-123) +
+            21*DiracDelta(k-122) + 28*DiracDelta(k-121) + 36*DiracDelta(k-120) + 45*DiracDelta(k-119) + 55*DiracDelta(k-118) +
+            66*DiracDelta(k-117) + 78*DiracDelta(k-116) + 91*DiracDelta(k-115) + 105*DiracDelta(k-114) + 120*DiracDelta(k-113) +
+            136*DiracDelta(k-112) + 153*DiracDelta(k-111) + 171*DiracDelta(k-110) + 190*DiracDelta(k-109) + 210*DiracDelta(k-108) +
+            231*DiracDelta(k-107) + 253*DiracDelta(k-106) + 276*DiracDelta(k-105) + 300*DiracDelta(k-104) + 325*DiracDelta(k-103) +
+            351*DiracDelta(k-102) + 378*DiracDelta(k-101) + 406*DiracDelta(k-100) + 435*DiracDelta(k-99) + 465*DiracDelta(k-98) +
+            496*DiracDelta(k-97) + 528*DiracDelta(k-96) + 561*DiracDelta(k-95) + 595*DiracDelta(k-94) + 630*DiracDelta(k-93) +
+            666*DiracDelta(k-92) + 703*DiracDelta(k-91) + 741*DiracDelta(k-90) + 780*DiracDelta(k-89) + 820*DiracDelta(k-88) +
+            861*DiracDelta(k-87) + 903*DiracDelta(k-86) + 946*DiracDelta(k-85) + 990*DiracDelta(k-84) + 1035*DiracDelta(k-83) +
+            1081*DiracDelta(k-82) + 1128*DiracDelta(k-81) + 1176*DiracDelta(k-80) + 1225*DiracDelta(k-79) + 1275*DiracDelta(k-78) +
+            1326*DiracDelta(k-77) + 1378*DiracDelta(k-76) + 1431*DiracDelta(k-75) + 1485*DiracDelta(k-74) + 1540*DiracDelta(k-73) +
+            1596*DiracDelta(k-72) + 1653*DiracDelta(k-71) + 1711*DiracDelta(k-70) + 1770*DiracDelta(k-69) + 1830*DiracDelta(k-68) +
+            1891*DiracDelta(k-67) + 1953*DiracDelta(k-66) + 2016*DiracDelta(k-65) + 2080*DiracDelta(k-64) + 2145*DiracDelta(k-63) +
+            2211*DiracDelta(k-62) + 2278*DiracDelta(k-61) + 2346*DiracDelta(k-60) + 2415*DiracDelta(k-59) + 2485*DiracDelta(k-58) +
+            2556*DiracDelta(k-57) + 2628*DiracDelta(k-56) + 2701*DiracDelta(k-55) + 2775*DiracDelta(k-54) + 2850*DiracDelta(k-53) +
+            2926*DiracDelta(k-52) + 3003*DiracDelta(k-51) + 3081*DiracDelta(k-50) + 3160*DiracDelta(k-49) + 3240*DiracDelta(k-48) +
+            3321*DiracDelta(k-47) + 3403*DiracDelta(k-46) + 3486*DiracDelta(k-45) + 3570*DiracDelta(k-44) + 3655*DiracDelta(k-43) +
+            3741*DiracDelta(k-42) + 3828*DiracDelta(k-41) + 3916*DiracDelta(k-40) + 4005*DiracDelta(k-39) + 4186*DiracDelta(k-37) +
+            4278*DiracDelta(k-36) + 4371*DiracDelta(k-35) + 4465*DiracDelta(k-34) + 4560*DiracDelta(k-33) + 4656*DiracDelta(k-32) +
+            4753*DiracDelta(k-31) + 4851*DiracDelta(k-30) + 4950*DiracDelta(k-29) + 5050*DiracDelta(k-28) + 5151*DiracDelta(k-27) +
+            5253*DiracDelta(k-26) + 5356*DiracDelta(k-25) + 5460*DiracDelta(k-24) + 5565*DiracDelta(k-23) + 5671*DiracDelta(k-22) +
+            5778*DiracDelta(k-21) + 5886*DiracDelta(k-20) + 5995*DiracDelta(k-19) + 6105*DiracDelta(k-18) + 6216*DiracDelta(k-17) +
+            6328*DiracDelta(k-16) + 6441*DiracDelta(k-15) + 6555*DiracDelta(k-14) + 6670*DiracDelta(k-13) + 6786*DiracDelta(k-12) +
+            6903*DiracDelta(k-11) + 7021*DiracDelta(k-10) + 7140*DiracDelta(k-9) + 7260*DiracDelta(k-8) + 7381*DiracDelta(k-7) +
+            7503*DiracDelta(k-6) + 7626*DiracDelta(k-5) + 7750*DiracDelta(k-4) + 7875*DiracDelta(k-3) + 8001*DiracDelta(k-2) +
+            8128*DiracDelta(k-1) + 8256*DiracDelta(k) + 8381*DiracDelta(k+1) + 8503*DiracDelta(k+2) + 8622*DiracDelta(k+3) +
+            8738*DiracDelta(k+4) + 8851*DiracDelta(k+5) + 8961*DiracDelta(k+6) + 9068*DiracDelta(k+7) + 9172*DiracDelta(k+8) +
+            9273*DiracDelta(k+9) + 9371*DiracDelta(k+10) + 9466*DiracDelta(k+11) + 9558*DiracDelta(k+12) + 9647*DiracDelta(k+13) +
+            9733*DiracDelta(k+14) + 9816*DiracDelta(k+15) + 9896*DiracDelta(k+16) + 9973*DiracDelta(k+17) + 10047*DiracDelta(k+18) +
+            10118*DiracDelta(k+19) + 10186*DiracDelta(k+20) + 10251*DiracDelta(k+21) + 10313*DiracDelta(k+22) + 10372*DiracDelta(k+23) +
+            10428*DiracDelta(k+24) + 10481*DiracDelta(k+25) + 10531*DiracDelta(k+26) + 10578*DiracDelta(k+27) + 10622*DiracDelta(k+28) +
+            10663*DiracDelta(k+29) + 10701*DiracDelta(k+30) + 10736*DiracDelta(k+31) + 10768*DiracDelta(k+32) + 10797*DiracDelta(k+33) +
+            10823*DiracDelta(k+34) + 10846*DiracDelta(k+35) + 10866*DiracDelta(k+36) + 10883*DiracDelta(k+37) + 10897*DiracDelta(k+38) +
+            10908*DiracDelta(k+39) + 10916*DiracDelta(k+40) + 10921*DiracDelta(k+41) + 10923*DiracDelta(k+42) + 10922*DiracDelta(k+43) +
+            10918*DiracDelta(k+44) + 10911*DiracDelta(k+45) + 10901*DiracDelta(k+46) + 10888*DiracDelta(k+47) + 10872*DiracDelta(k+48) +
+            10853*DiracDelta(k+49) + 10831*DiracDelta(k+50) + 10806*DiracDelta(k+51) + 10778*DiracDelta(k+52) + 10747*DiracDelta(k+53) +
+            10713*DiracDelta(k+54) + 10676*DiracDelta(k+55) + 10636*DiracDelta(k+56) + 10593*DiracDelta(k+57) + 10547*DiracDelta(k+58) +
+            10498*DiracDelta(k+59) + 10446*DiracDelta(k+60) + 10391*DiracDelta(k+61) + 10333*DiracDelta(k+62) + 10272*DiracDelta(k+63) +
+            10208*DiracDelta(k+64) + 10141*DiracDelta(k+65) + 10071*DiracDelta(k+66) + 9998*DiracDelta(k+67) + 9922*DiracDelta(k+68) +
+            9843*DiracDelta(k+69) + 9761*DiracDelta(k+70) + 9676*DiracDelta(k+71) + 9588*DiracDelta(k+72) + 9497*DiracDelta(k+73) +
+            9403*DiracDelta(k+74) + 9306*DiracDelta(k+75) + 9206*DiracDelta(k+76) + 9103*DiracDelta(k+77) + 8997*DiracDelta(k+78) +
+            8888*DiracDelta(k+79) + 8776*DiracDelta(k+80) + 8661*DiracDelta(k+81) + 8543*DiracDelta(k+82) + 8422*DiracDelta(k+83) +
+            8298*DiracDelta(k+84) + 8171*DiracDelta(k+85) + 8041*DiracDelta(k+86) + 7908*DiracDelta(k+87) + 7772*DiracDelta(k+88) +
+            7633*DiracDelta(k+89) + 7491*DiracDelta(k+90) + 7346*DiracDelta(k+91) + 7198*DiracDelta(k+92) + 7047*DiracDelta(k+93) +
+            6893*DiracDelta(k+94) + 6736*DiracDelta(k+95) + 6576*DiracDelta(k+96) + 6413*DiracDelta(k+97) + 6247*DiracDelta(k+98) +
+            5906*DiracDelta(k+100) + 5731*DiracDelta(k+101) + 5553*DiracDelta(k+102) + 5372*DiracDelta(k+103) + 5188*DiracDelta(k+104) +
+            5001*DiracDelta(k+105) + 4811*DiracDelta(k+106) + 4618*DiracDelta(k+107) + 4422*DiracDelta(k+108) + 4223*DiracDelta(k+109) +
+            4021*DiracDelta(k+110) + 3816*DiracDelta(k+111) + 3608*DiracDelta(k+112) + 3397*DiracDelta(k+113) + 3183*DiracDelta(k+114) +
+            2966*DiracDelta(k+115) + 2746*DiracDelta(k+116) + 2523*DiracDelta(k+117) + 2297*DiracDelta(k+118) + 2068*DiracDelta(k+119) +
+            1836*DiracDelta(k+120) + 1601*DiracDelta(k+121) + 1363*DiracDelta(k+122) + 1122*DiracDelta(k+123) + 878*DiracDelta(k+124) +
+            631*DiracDelta(k+125) + 381*DiracDelta(k+126) + 128*DiracDelta(k+127) - 128*DiracDelta(k+128) - 381*DiracDelta(k+129) -
+            631*DiracDelta(k+130) - 878*DiracDelta(k+131) - 1122*DiracDelta(k+132) - 1363*DiracDelta(k+133) - 1601*DiracDelta(k+134) -
+            1836*DiracDelta(k+135) - 2068*DiracDelta(k+136) - 2297*DiracDelta(k+137) - 2523*DiracDelta(k+138) - 2746*DiracDelta(k+139) -
+            2966*DiracDelta(k+140) - 3183*DiracDelta(k+141) - 3397*DiracDelta(k+142) - 3608*DiracDelta(k+143) - 3816*DiracDelta(k+144) -
+            4021*DiracDelta(k+145) - 4223*DiracDelta(k+146) - 4422*DiracDelta(k+147) - 4618*DiracDelta(k+148) - 4811*DiracDelta(k+149) -
+            5001*DiracDelta(k+150) - 5188*DiracDelta(k+151) - 5372*DiracDelta(k+152) - 5553*DiracDelta(k+153) - 5731*DiracDelta(k+154) -
+            5906*DiracDelta(k+155) - 6078*DiracDelta(k+156) - 6247*DiracDelta(k+157) - 6413*DiracDelta(k+158) - 6576*DiracDelta(k+159) -
+            6736*DiracDelta(k+160) - 6893*DiracDelta(k+161) - 7047*DiracDelta(k+162) - 7198*DiracDelta(k+163) - 7346*DiracDelta(k+164) -
+            7491*DiracDelta(k+165) - 7633*DiracDelta(k+166) - 7772*DiracDelta(k+167) - 7908*DiracDelta(k+168) - 8041*DiracDelta(k+169) -
+            8171*DiracDelta(k+170) - 8298*DiracDelta(k+171) - 8422*DiracDelta(k+172) - 8543*DiracDelta(k+173) - 8661*DiracDelta(k+174) -
+            8776*DiracDelta(k+175) - 8888*DiracDelta(k+176) - 8997*DiracDelta(k+177) - 9103*DiracDelta(k+178) - 9206*DiracDelta(k+179) -
+            9306*DiracDelta(k+180) - 9403*DiracDelta(k+181) - 9497*DiracDelta(k+182) - 9588*DiracDelta(k+183) - 9676*DiracDelta(k+184) -
+            9761*DiracDelta(k+185) - 9843*DiracDelta(k+186) - 9922*DiracDelta(k+187) - 9998*DiracDelta(k+188) - 10071*DiracDelta(k+189) -
+            10141*DiracDelta(k+190) - 10208*DiracDelta(k+191) - 10272*DiracDelta(k+192) - 10333*DiracDelta(k+193) - 10391*DiracDelta(k+194) -
+            10446*DiracDelta(k+195) - 10498*DiracDelta(k+196) - 10547*DiracDelta(k+197) - 10593*DiracDelta(k+198) - 10636*DiracDelta(k+199) -
+            10676*DiracDelta(k+200) - 10713*DiracDelta(k+201) - 10747*DiracDelta(k+202) - 10778*DiracDelta(k+203) - 10806*DiracDelta(k+204) -
+            10831*DiracDelta(k+205) - 10853*DiracDelta(k+206) - 10872*DiracDelta(k+207) - 10888*DiracDelta(k+208) - 10901*DiracDelta(k+209) -
+            10911*DiracDelta(k+210) - 10918*DiracDelta(k+211) - 10922*DiracDelta(k+212) - 10923*DiracDelta(k+213) - 10921*DiracDelta(k+214) -
+            10916*DiracDelta(k+215) - 10908*DiracDelta(k+216) - 10897*DiracDelta(k+217) - 10883*DiracDelta(k+218) - 10866*DiracDelta(k+219) -
+            10846*DiracDelta(k+220) - 10823*DiracDelta(k+221) - 10797*DiracDelta(k+222) - 10768*DiracDelta(k+223) - 10736*DiracDelta(k+224) -
+            10701*DiracDelta(k+225) - 10663*DiracDelta(k+226) - 10622*DiracDelta(k+227) - 10578*DiracDelta(k+228) - 10531*DiracDelta(k+229) -
+            10481*DiracDelta(k+230) - 10428*DiracDelta(k+231) - 10372*DiracDelta(k+232) - 10313*DiracDelta(k+233) - 10251*DiracDelta(k+234) -
+            10186*DiracDelta(k+235) - 10118*DiracDelta(k+236) - 10047*DiracDelta(k+237) - 9973*DiracDelta(k+238) - 9896*DiracDelta(k+239) -
+            9816*DiracDelta(k+240) - 9733*DiracDelta(k+241) - 9647*DiracDelta(k+242) - 9558*DiracDelta(k+243) - 9466*DiracDelta(k+244) -
+            9371*DiracDelta(k+245) - 9273*DiracDelta(k+246) - 9172*DiracDelta(k+247) - 9068*DiracDelta(k+248) - 8961*DiracDelta(k+249) -
+            8851*DiracDelta(k+250) - 8738*DiracDelta(k+251) - 8622*DiracDelta(k+252) - 8503*DiracDelta(k+253) - 8381*DiracDelta(k+254) -
+            8256*DiracDelta(k+255) - 8128*DiracDelta(k+256) - 8001*DiracDelta(k+257) - 7875*DiracDelta(k+258) - 7750*DiracDelta(k+259) -
+            7626*DiracDelta(k+260) - 7503*DiracDelta(k+261) - 7381*DiracDelta(k+262) - 7260*DiracDelta(k+263) - 7140*DiracDelta(k+264) -
+            7021*DiracDelta(k+265) - 6903*DiracDelta(k+266) - 6786*DiracDelta(k+267) - 6670*DiracDelta(k+268) - 6555*DiracDelta(k+269) -
+            6441*DiracDelta(k+270) - 6328*DiracDelta(k+271) - 6216*DiracDelta(k+272) - 6105*DiracDelta(k+273) - 5995*DiracDelta(k+274) -
+            5886*DiracDelta(k+275) - 5778*DiracDelta(k+276) - 5671*DiracDelta(k+277) - 5565*DiracDelta(k+278) - 5460*DiracDelta(k+279) -
+            5356*DiracDelta(k+280) - 5253*DiracDelta(k+281) - 5151*DiracDelta(k+282) - 5050*DiracDelta(k+283) - 4950*DiracDelta(k+284) -
+            4851*DiracDelta(k+285) - 4753*DiracDelta(k+286) - 4656*DiracDelta(k+287) - 4560*DiracDelta(k+288) - 4465*DiracDelta(k+289) -
+            4371*DiracDelta(k+290) - 4278*DiracDelta(k+291) - 4186*DiracDelta(k+292) - 4095*DiracDelta(k+293) - 4005*DiracDelta(k+294) -
+            3916*DiracDelta(k+295) - 3828*DiracDelta(k+296) - 3741*DiracDelta(k+297) - 3655*DiracDelta(k+298) - 3570*DiracDelta(k+299) -
+            3486*DiracDelta(k+300) - 3403*DiracDelta(k+301) - 3321*DiracDelta(k+302) - 3240*DiracDelta(k+303) - 3160*DiracDelta(k+304) -
+            3081*DiracDelta(k+305) - 3003*DiracDelta(k+306) - 2926*DiracDelta(k+307) - 2850*DiracDelta(k+308) - 2775*DiracDelta(k+309) -
+            2701*DiracDelta(k+310) - 2628*DiracDelta(k+311) - 2556*DiracDelta(k+312) - 2485*DiracDelta(k+313) - 2415*DiracDelta(k+314) -
+            2346*DiracDelta(k+315) - 2278*DiracDelta(k+316) - 2211*DiracDelta(k+317) - 2145*DiracDelta(k+318) - 2080*DiracDelta(k+319) -
+            2016*DiracDelta(k+320) - 1953*DiracDelta(k+321) - 1891*DiracDelta(k+322) - 1830*DiracDelta(k+323) - 1770*DiracDelta(k+324) -
+            1711*DiracDelta(k+325) - 1653*DiracDelta(k+326) - 1596*DiracDelta(k+327) - 1540*DiracDelta(k+328) - 1485*DiracDelta(k+329) -
+            1431*DiracDelta(k+330) - 1378*DiracDelta(k+331) - 1326*DiracDelta(k+332) - 1275*DiracDelta(k+333) - 1225*DiracDelta(k+334) -
+            1176*DiracDelta(k+335) - 1128*DiracDelta(k+336) - 1081*DiracDelta(k+337) - 1035*DiracDelta(k+338) - 990*DiracDelta(k+339) -
+            946*DiracDelta(k+340) - 903*DiracDelta(k+341) - 861*DiracDelta(k+342) - 820*DiracDelta(k+343) - 780*DiracDelta(k+344) -
+            741*DiracDelta(k+345) - 703*DiracDelta(k+346) - 666*DiracDelta(k+347) - 630*DiracDelta(k+348) - 595*DiracDelta(k+349) -
+            561*DiracDelta(k+350) - 528*DiracDelta(k+351) - 496*DiracDelta(k+352) - 465*DiracDelta(k+353) - 435*DiracDelta(k+354) -
+            406*DiracDelta(k+355) - 378*DiracDelta(k+356) - 351*DiracDelta(k+357) - 325*DiracDelta(k+358) - 300*DiracDelta(k+359) -
+            276*DiracDelta(k+360) - 253*DiracDelta(k+361) - 231*DiracDelta(k+362) - 210*DiracDelta(k+363) - 190*DiracDelta(k+364) -
+            171*DiracDelta(k+365) - 153*DiracDelta(k+366) - 136*DiracDelta(k+367) - 120*DiracDelta(k+368) - 105*DiracDelta(k+369) -
+            91*DiracDelta(k+370) - 78*DiracDelta(k+371) - 66*DiracDelta(k+372) - 55*DiracDelta(k+373) - 45*DiracDelta(k+374) -
+            36*DiracDelta(k+375) - 28*DiracDelta(k+376) - 21*DiracDelta(k+377) - 15*DiracDelta(k+378) - 10*DiracDelta(k+379) -
+            6*DiracDelta(k+380) - 3*DiracDelta(k+381) - DiracDelta(k+382)
+            ));
+    end;
+  end;
+end;
+
+function TPPGAnalyzer.Convolve(const Signal, Kernel: TSignalArray; Mode: TConvolutionMode): TSignalArray;
+var
+  n, k, sigLen, kerLen, kerMid, start_k, end_k: Integer;
+  sum: Double;
+  flippedKernel: TSignalArray;
+begin
+  sigLen := Length(Signal); kerLen := Length(Kernel);
+  if (sigLen = 0) or (kerLen = 0) then Exit(nil);
+  SetLength(flippedKernel, kerLen);
+  for k := 0 to kerLen - 1 do flippedKernel[k] := Kernel[kerLen - 1 - k];
+  kerMid := kerLen div 2;
+  SetLength(Result, sigLen);
+  for n := 0 to sigLen - 1 do begin
+    sum := 0;
+    start_k := Max(0, n - sigLen + kerMid + 1);
+    end_k := Min(kerLen - 1, n + kerMid);
+    for k := start_k to end_k do
+      if (n - k + kerMid >= 0) and (n - k + kerMid < sigLen) then
+        sum := sum + Signal[n - k + kerMid] * flippedKernel[k];
+    Result[n] := sum;
+  end;
+end;
+
+// ============================================================================
+// IMPLEMENTASI FILTER BARU (MENGGANTIKAN ManualButterBandpass & ManualLFilter)
+// Menggunakan Referensi: Filter Reference.txt
+// ============================================================================
+function TPPGAnalyzer.Filter_CustomRef(const Signal: TSignalArray; Fs, LowCutoff, HighCutoff: Double): TSignalArray;
+var
+  N, i: Integer;
+  Tm, WcLPF, WcHPF, denom: Double;
+  // Koefisien LPF Orde 2
+  LPFa0, LPFa1, LPFa2, LPFb1, LPFb2: Double;
+  // Koefisien HPF Orde 1
+  HPFa0, HPFa1, HPFb1: Double;
+  SignalLPF: TSignalArray;
+begin
+  N := Length(Signal);
+  SetLength(Result, N);
+  if N < 3 then Exit;
+
+  // 1. Hitung Parameter Dasar
+  Tm := 1.0 / Fs;
+  WcLPF := 2 * Pi * HighCutoff;
+  WcHPF := 2 * Pi * LowCutoff;
+
+  // 2. Hitung Koefisien LPF (Low Pass)
+  denom := (4 / (Tm * Tm)) + (2 * Sqrt(2) * WcLPF / Tm) + Sqr(WcLPF);
+  if denom = 0 then Exit; // Safety check
+
+  LPFb1 := ((8 / (Tm * Tm)) - 2 * Sqr(WcLPF)) / denom;
+  LPFb2 := ((4 / (Tm * Tm)) - (2 * Sqrt(2) * WcLPF / Tm) + Sqr(WcLPF)) / denom;
+  LPFa0 := Sqr(WcLPF) / denom;
+  LPFa1 := 2 * Sqr(WcLPF) / denom;
+  LPFa2 := LPFa0;
+
+  // 3. Hitung Koefisien HPF (High Pass)
+  denom := WcHPF + (2 / Tm);
+  if denom = 0 then Exit;
+
+  HPFa0 := (2 / Tm) / denom;
+  HPFa1 := -HPFa0;
+  HPFb1 := (WcHPF - (2 / Tm)) / denom;
+
+  // 4. Eksekusi LPF (Difference Equation)
+  SetLength(SignalLPF, N);
+  SignalLPF[0] := Signal[0];
+  if N > 1 then SignalLPF[1] := Signal[1];
+
+  for i := 2 to N - 1 do
+  begin
+    SignalLPF[i] := (LPFb1 * SignalLPF[i-1]) - (LPFb2 * SignalLPF[i-2]) +
+                    (LPFa0 * Signal[i]) + (LPFa1 * Signal[i-1]) + (LPFa2 * Signal[i-2]);
+  end;
+
+  // 5. Eksekusi HPF (Input dari hasil LPF)
+  Result[0] := 0;
+  for i := 1 to N - 1 do
+  begin
+    Result[i] := (HPFa0 * (SignalLPF[i] - SignalLPF[i-1])) - (HPFb1 * Result[i-1]);
+  end;
+end;
+
+function TPPGAnalyzer.PreprocessSignal(const Signal: TSignalArray; Fs: Double): TSignalArray;
+var
+  i: Integer;
+  signalNoDC, filteredSignal, normalizedSignal, baseline, window: TSignalArray;
+  windowSize: Integer;
+  std: Double;
+begin
+  // 1. Baseline Wander Removal (Moving Average)
+  windowSize := Round(1.0 * Fs);
+  if (windowSize mod 2) = 0 then Inc(windowSize);
+
+  if Length(Signal) > windowSize then
+  begin
+    SetLength(window, windowSize);
+    for i := 0 to windowSize-1 do window[i] := 1.0 / windowSize;
+
+    baseline := Convolve(Signal, window);
+    SetLength(signalNoDC, Length(Signal));
+    for i := 0 to High(Signal) do
+      signalNoDC[i] := Signal[i] - baseline[i];
+  end
+  else
+    signalNoDC := Copy(Signal);
+
+  // 2. Apply Custom Filter Baru (0.5 Hz - 8.0 Hz)
+  // Ini memanggil fungsi Filter_CustomRef yang baru dibuat
+  filteredSignal := Filter_CustomRef(signalNoDC, Fs, 0.5, 8.0);
+
+  // 3. Normalisasi Amplitudo
+  std := StdDev(filteredSignal);
+  if std > 0 then
+  begin
+    SetLength(normalizedSignal, Length(filteredSignal));
+    for i := 0 to High(filteredSignal) do
+      normalizedSignal[i] := filteredSignal[i] / std;
+    Result := normalizedSignal;
+  end
+  else
+    Result := filteredSignal;
+end;
+
+procedure TPPGAnalyzer.LinearDetrend(var Signal: TSignalArray);
+var
+  i, N: Integer;
+  sumX, sumY, sumXY, sumXX: Double;
+  slope, intercept: Double;
+  x: Double;
+begin
+  N := Length(Signal);
+  if N < 2 then Exit;
+
+  sumX := 0; sumY := 0; sumXY := 0; sumXX := 0;
+
+  // Hitung statistik untuk regresi linier (y = mx + c)
+  for i := 0 to N - 1 do
+  begin
+    x := i;
+    sumX := sumX + x;
+    sumY := sumY + Signal[i];
+    sumXY := sumXY + (x * Signal[i]);
+    sumXX := sumXX + (x * x);
+  end;
+
+  slope := (N * sumXY - sumX * sumY) / (N * sumXX - sumX * sumX);
+  intercept := (sumY - slope * sumX) / N;
+
+  // Kurangi sinyal dengan garis tren tersebut
+  for i := 0 to N - 1 do
+    Signal[i] := Signal[i] - (slope * i + intercept);
+end;
+
+{------------------------------------------------------------------------------}
+{                      Analisis Spektral dan Deteksi Puncak                    }
+{------------------------------------------------------------------------------}
+
+procedure TPPGAnalyzer.FFTMagnitudeAndFrequencies(const Signal: TSignalArray; Fs: Double; out Freqs, Mags: TSignalArray);
+var
+  N, N_fft, half: Integer;
+  paddedSignal: TSignalArray;
+  fft_complex: TComplexArray;
+  i: Integer;
+begin
+  SetLength(Freqs, 0);
+  SetLength(Mags, 0);
+  N := Length(Signal);
+  if (N = 0) or (Fs <= 0) then Exit;
+
+  // 1. Tentukan ukuran FFT (pangkat 2 berikutnya) dan lakukan zero-padding
+  N_fft := 1 shl Ceil(Log2(N));
+  SetLength(paddedSignal, N_fft);
+  for i := 0 to N - 1 do
+    paddedSignal[i] := Signal[i];
+  for i := N to N_fft - 1 do
+    paddedSignal[i] := 0;
+
+  // 2. Lakukan FFT
+  FFT(paddedSignal, fft_complex);
+
+  // 3. Hitung Magnitudo dan Frekuensi untuk spektrum satu sisi
+  half := N_fft div 2;
+  SetLength(Mags, half);
+  SetLength(Freqs, half);
+
+  // DC Component (Freq = 0)
+  Mags[0] := Sqrt(Sqr(fft_complex[0].Re) + Sqr(fft_complex[0].Im)) / N;
+  Freqs[0] := 0;
+
+  // AC Components
+  for i := 1 to half - 1 do
+  begin
+    Mags[i] := 2 * Sqrt(Sqr(fft_complex[i].Re) + Sqr(fft_complex[i].Im)) / N;
+    Freqs[i] := i * Fs / N_fft;
+  end;
+end;
+
+procedure TPPGAnalyzer.FFT(const Input: TSignalArray; out Output: TComplexArray);
+// ... [Implementation from your original CEEMDAN.pas, it's correct]
+var N, i, j, k, n1, n2: Integer; A, s, t: TComplex;
+begin
+  N := Length(Input);
+  if (N = 0) then Exit;
+  if (N and (N - 1) <> 0) then
+    raise Exception.Create('FFT input size must be a power of 2.');
+  SetLength(Output, N);
+  for i := 0 to N - 1 do Output[i] := Cmplx(Input[i], 0);
+
+  j := 0; n2 := N div 2;
+  for i := 1 to N - 2 do
+  begin
+    n1 := n2;
+    while j >= n1 do begin j := j - n1; n1 := n1 div 2; end;
+    j := j + n1;
+    if i < j then begin A := Output[i]; Output[i] := Output[j]; Output[j] := A; end;
+  end;
+
+  n1 := 0; n2 := 1;
+  for i := 0 to Round(Log2(N)) - 1 do
+  begin
+    n1 := n2; n2 := n2 + n2;
+    A := Cmplx(1, 0);
+    s := Cmplx(Cos(Pi/n1), -Sin(Pi/n1));
+    for j := 0 to n1 - 1 do
+    begin
+      for k := j to N - 1 do
+      begin
+        if (k mod n2) = j then
+        begin
+          t := Cmplx(A.Re * Output[k+n1].Re - A.Im * Output[k+n1].Im,
+                       A.Re * Output[k+n1].Im + A.Im * Output[k+n1].Re);
+          Output[k+n1] := Cmplx(Output[k].Re - t.Re, Output[k].Im - t.Im);
+          Output[k] := Cmplx(Output[k].Re + t.Re, Output[k].Im + t.Im);
+        end;
+      end;
+      A := Cmplx(A.Re * s.Re - A.Im * s.Im, A.Re * s.Im + A.Im * s.Re);
+    end;
+  end;
+end;
+
+function TPPGAnalyzer.ManualFindPeaks(const x: TSignalArray; MinDistance, MinHeight, MinProminence: Double): TArray<Integer>;
+// ... [Simplified implementation focusing on distance and height]
+var
+  i, j, lastPeak: Integer;
+  peakList: TList<Integer>;
+begin
+  peakList := TList<Integer>.Create;
+  try
+    if Length(x) < 3 then Exit(nil);
+    for i := 1 to High(x) - 1 do
+    begin
+      if (x[i] > x[i-1]) and (x[i] > x[i+1]) and (x[i] > MinHeight) then
+      begin
+        if peakList.Count = 0 then
+          peakList.Add(i)
+        else
+        begin
+          lastPeak := peakList.Last;
+          if (i - lastPeak) > MinDistance then
+            peakList.Add(i)
+          else
+          begin
+            if x[i] > x[lastPeak] then
+            begin
+              peakList.Delete(peakList.Count-1);
+              peakList.Add(i);
+            end;
+          end;
+        end;
+      end;
+    end;
+    Result := peakList.ToArray;
+  finally
+    peakList.Free;
+  end;
+end;
+
+function TPPGAnalyzer.CubicSplineInterpolate(const X, Y: TSignalArray; const Xi: TSignalArray): TSignalArray;
+// ... [Implementation from your original CEEMDAN.pas, it is required for HRV Freq Domain]
+var n, i, k: Integer; h, alpha, l, mu, z, B, C, D: TSignalArray; dx: Double;
+begin
+  n := Length(X); SetLength(Result, Length(Xi));
+  if n < 2 then
+  begin
+    for i := 0 to High(Xi) do
+      if n = 1 then Result[i] := Y[0] else Result[i] := 0.0;
+    Exit;
+  end;
+  if n = 2 then
+  begin
+     for i := 0 to High(Xi) do
+       if (X[1] - X[0]) <> 0 then
+         Result[i] := Y[0] + (Y[1] - Y[0]) * (Xi[i] - X[0]) / (X[1] - X[0])
+       else Result[i] := Y[0];
+     Exit;
+  end;
+  SetLength(h, n - 1);
+  for i := 0 to n - 2 do h[i] := X[i+1] - X[i];
+  SetLength(alpha, n - 1); alpha[0] := 0;
+  for i := 1 to n - 2 do
+    if (h[i]<>0) and (h[i-1]<>0) then
+      alpha[i] := (3/h[i]) * (Y[i+1] - Y[i]) - (3/h[i-1]) * (Y[i] - Y[i-1]);
+  SetLength(l, n); SetLength(mu, n); SetLength(z, n);
+  l[0] := 1; mu[0] := 0; z[0] := 0;
+  for i := 1 to n - 2 do
+  begin
+    if (i < Length(h)) and (i-1 < Length(h)) and (i-1 < Length(mu)) then
+    begin
+      l[i] := 2 * (X[i+1] - X[i-1]) - h[i-1] * mu[i-1];
+      if l[i] <> 0 then
+      begin
+        mu[i] := h[i] / l[i];
+        z[i] := (alpha[i] - h[i-1] * z[i-1]) / l[i];
+      end;
+    end;
+  end;
+  l[n-1] := 1; z[n-1] := 0;
+  SetLength(C, n); C[n-1] := 0;
+  for i := n - 2 downto 0 do
+    if (i < Length(z)) and (i < Length(mu)) and (i+1 < Length(C)) then
+      C[i] := z[i] - mu[i] * C[i+1];
+  SetLength(B, n - 1); SetLength(D, n - 1);
+  for i := 0 to n - 2 do
+  begin
+    if h[i] <> 0 then
+    begin
+      D[i] := (C[i+1] - C[i]) / (3 * h[i]);
+      B[i] := (Y[i+1] - Y[i]) / h[i] - h[i] * (C[i+1] + 2 * C[i]) / 3;
+    end else
+    begin
+      D[i] := 0; B[i] := 0;
+    end;
+  end;
+  for i := 0 to High(Xi) do
+  begin
+    k := 0;
+    while (k < n - 2) and (X[k+1] < Xi[i]) do Inc(k);
+    dx := Xi[i] - X[k];
+    if (k < Length(Y)) and (k < Length(B)) and (k < Length(C)) and (k < Length(D)) then
+      Result[i] := Y[k] + B[k] * dx + C[k] * Sqr(dx) + D[k] * Power(dx, 3);
+  end;
+end;
+
+{------------------------------------------------------------------------------}
+{                             Alur Kerja Utama                                 }
+{------------------------------------------------------------------------------}
+procedure TPPGAnalyzer.Downsample(const SignalIn, TimeIn: TSignalArray; Factor: Integer;
+  out SignalOut, TimeOut: TSignalArray; out NewFs: Double);
+var i, newSize: Integer;
+begin
+  if (Factor <= 1) or (Length(SignalIn) = 0) then
+  begin
+    SignalOut := Copy(SignalIn); TimeOut := Copy(TimeIn);
+    if Length(TimeIn) > 1 then NewFs := (Length(TimeIn) - 1) / (TimeIn[High(TimeIn)] - TimeIn[0]) else NewFs := 0;
+    Exit;
+  end;
+  newSize := Length(SignalIn) div Factor;
+  SetLength(SignalOut, newSize); SetLength(TimeOut, newSize);
+  for i := 0 to newSize - 1 do
+  begin
+    SignalOut[i] := SignalIn[i * Factor]; TimeOut[i] := TimeIn[i * Factor];
+  end;
+  if Length(TimeOut) > 1 then NewFs := (Length(TimeOut) - 1) / (TimeOut[High(TimeOut)] - TimeOut[0]) else NewFs := 0;
+end;
+
+function TPPGAnalyzer.Decompose_DWT(const Signal: TSignalArray): TDictionary<Integer, TSignalArray>;
+var
+  j, min_k, max_k, i: Integer;
+  q_filter_dict: TDictionary<Integer, Double>;
+  filter_coeffs: TSignalArray;
+begin
+  Result := TDictionary<Integer, TSignalArray>.Create;
+  for j := 1 to 8 do
+  begin
+    if FQjTimeCoeffs.TryGetValue(j, q_filter_dict) and (q_filter_dict.Count > 0) then
+    begin
+       min_k := System.MaxInt;
+       max_k := -2147483648;
+       for i in q_filter_dict.Keys do begin
+         if i < min_k then min_k := i;
+         if i > max_k then max_k := i;
+       end;
+       SetLength(filter_coeffs, max_k - min_k + 1);
+       for i := min_k to max_k do
+       begin
+         if q_filter_dict.ContainsKey(i) then
+           filter_coeffs[i-min_k] := q_filter_dict[i]
+         else
+           filter_coeffs[i-min_k] := 0;
+       end;
+
+       Result.Add(j, Convolve(Signal, filter_coeffs));
+    end;
+  end;
+end;
+
+procedure TPPGAnalyzer.AnalyzeSignalZeroCrossing(const Signal, Time: TSignalArray;
+  out MaximaIdx, MinimaIdx, ZeroCrossIdx: TArray<Integer>;
+  out ZeroLineVal: Double);
+var
+  i: Integer;
+  IsPositive: Boolean;
+  LocalMax, LocalMin: Double;
+  IdxMax, IdxMin: Integer;
+  ListMax, ListMin, ListZero: TList<Integer>;
+
+  // Variabel untuk Logika Refractory (Pencegahan Double Peak)
+  LastPeakTime, CurrentPeakTime: Double;
+  MinRefractoryPeriod: Double; // Batas minimum antar detak (ms)
+  LastPeakIndex: Integer;
+begin
+  // Reset Output
+  SetLength(MaximaIdx, 0);
+  SetLength(MinimaIdx, 0);
+  SetLength(ZeroCrossIdx, 0);
+
+  if Length(Signal) < 2 then Exit;
+
+  ListMax := TList<Integer>.Create;
+  ListMin := TList<Integer>.Create;
+  ListZero := TList<Integer>.Create;
+
+  try
+    // 1. Tentukan Garis Zero
+    // Kita gunakan HARD ZERO (0.0) karena sinyal diasumsikan sudah di-detrend/bandpass di Unit1.
+    // Ini mencegah garis referensi 'mengambang' mengikuti rata-rata sinyal.
+    ZeroLineVal := 0.0;
+
+    // 2. Inisialisasi State
+    IsPositive := Signal[0] >= ZeroLineVal;
+    LocalMax := -MaxDouble;
+    LocalMin := MaxDouble;
+    IdxMax := -1;
+    IdxMin := -1;
+
+    // 3. Setting Refractory Period
+    // 300ms setara dengan heart rate 200 bpm.
+    // Sinyal yang lebih cepat dari ini dianggap noise/artifact fisiologis.
+    MinRefractoryPeriod := 0.30; // 0.30 detik
+    LastPeakTime := -999.0;      // Waktu dummy awal
+
+    for i := 0 to High(Signal) do
+    begin
+      // --- A. Pencarian Ekstrim Lokal (Puncak & Lembah) ---
+      if IsPositive then
+      begin
+        // Cari titik tertinggi selama berada di area positif
+        if Signal[i] > LocalMax then
+        begin
+          LocalMax := Signal[i];
+          IdxMax := i;
+        end;
+      end
+      else
+      begin
+        // Cari titik terendah selama berada di area negatif
+        if Signal[i] < LocalMin then
+        begin
+          LocalMin := Signal[i];
+          IdxMin := i;
+        end;
+      end;
+
+      // --- B. Deteksi Zero Crossing ---
+      if (i < High(Signal)) then
+      begin
+        // KASUS 1: Crossing DOWN (Positif -> Negatif)
+        // Saat ini terjadi, gelombang sistolik (positif) selesai. Waktunya validasi puncak.
+        if (IsPositive and (Signal[i+1] < ZeroLineVal)) then
+        begin
+          IsPositive := False;
+          ListZero.Add(i);
+
+          // === LOGIKA SMART REFRACTORY PERIOD ===
+          if IdxMax <> -1 then
+          begin
+            CurrentPeakTime := Time[IdxMax];
+
+            // Cek 1: Apakah ini puncak pertama?
+            if ListMax.Count = 0 then
+            begin
+              ListMax.Add(IdxMax);
+              LastPeakTime := CurrentPeakTime;
+            end
+            // Cek 2: Apakah jarak dari puncak terakhir CUKUP JAUH? (> 300ms)
+            else if (CurrentPeakTime - LastPeakTime) >= MinRefractoryPeriod then
+            begin
+              // Jarak aman, terima sebagai puncak baru yang valid
+              ListMax.Add(IdxMax);
+              LastPeakTime := CurrentPeakTime;
+            end
+            // Cek 3: Jarak TERLALU DEKAT (< 300ms). Apakah ini puncak yang lebih baik?
+            else
+            begin
+              // Ambil index puncak terakhir yang sudah tersimpan
+              LastPeakIndex := ListMax.Last;
+
+              // Jika puncak baru LEBIH TINGGI dari puncak sebelumnya yang terlalu dekat,
+              // Asumsikan puncak sebelumnya adalah noise (atau dicrotic notch yang tinggi),
+              // dan puncak baru ini adalah sistolik yang sebenarnya.
+              if Signal[IdxMax] > Signal[LastPeakIndex] then
+              begin
+                ListMax.Delete(ListMax.Count - 1); // Hapus yang lama
+                ListMax.Add(IdxMax);               // Masukkan yang baru
+                LastPeakTime := CurrentPeakTime;   // Update waktu
+              end;
+              // Jika puncak baru lebih rendah, abaikan (dianggap noise/echo).
+            end;
+          end;
+
+          // Reset pencarian Minima
+          LocalMin := MaxDouble;
+          IdxMin := -1;
+        end
+        // KASUS 2: Crossing UP (Negatif -> Positif)
+        else if (not IsPositive and (Signal[i+1] >= ZeroLineVal)) then
+        begin
+          IsPositive := True;
+          ListZero.Add(i);
+
+          // Simpan Minima (Diastolik) - Biasanya tidak memerlukan logika refrakter ketat
+          if IdxMin <> -1 then ListMin.Add(IdxMin);
+
+          // Reset pencarian Maxima
+          LocalMax := -MaxDouble;
+          IdxMax := -1;
+        end;
+      end;
+    end;
+
+    // Konversi List ke Array
+    MaximaIdx := ListMax.ToArray;
+    MinimaIdx := ListMin.ToArray;
+    ZeroCrossIdx := ListZero.ToArray;
+
+  finally
+    ListMax.Free;
+    ListMin.Free;
+    ListZero.Free;
+  end;
+end;
+
+procedure TPPGAnalyzer.Welch(const Signal: TSignalArray; Fs: Double; out Freqs, Psd: TSignalArray; SegmentLen: Integer; OverlapRatio: Double);
+var
+  x, segment: TSignalArray;
+  window: TSignalArray;
+  psd_segments: TList<TSignalArray>;
+  nperseg, noverlap, step, num_segments, i, j: Integer;
+  avg_psd: TSignalArray;
+  N_fft, half, MinNFFT: Integer; // Tambah variabel MinNFFT
+  fft_complex: TComplexArray;
+  power_spectrum: TSignalArray;
+  sum_sq_win: Double;
+begin
+  SetLength(Freqs, 0); SetLength(Psd, 0);
+  x := Copy(Signal);
+  if Length(x) < 4 then Exit;
+
+  nperseg := Min(SegmentLen, Length(x));
+  noverlap := Round(nperseg * OverlapRatio);
+  step := nperseg - noverlap;
+  if step < 1 then step := 1; // Safety check
+
+  SetLength(window, nperseg);
+  for i := 0 to nperseg - 1 do
+    window[i] := 0.5 * (1 - Cos(2 * PI * i / (nperseg - 1))); // Hanning Window
+  sum_sq_win := SumOfSquares(window);
+  if sum_sq_win = 0 then Exit;
+
+  // --- LOGIKA BARU: ZERO PADDING ---
+  // Kita memaksa ukuran FFT minimal 4096 poin.
+  // Jika data hanya 300 poin, sisa 3796 poin akan diisi nol (Zero Padding).
+  // Ini tidak menambah informasi baru, tapi "menginterpolasi" spektrum frekuensi
+  // sehingga puncak (peak) tidak loncat-loncat kasar (misal dari 23.44 lgsg ke 25.00).
+  MinNFFT := 4096;
+  N_fft := 1 shl (Ceil(Log2(nperseg)));
+  if N_fft < MinNFFT then N_fft := MinNFFT;
+  // ---------------------------------
+
+  num_segments := (Length(x) - noverlap) div step;
+  if num_segments < 1 then num_segments := 1; // Handle short signal
+
+  psd_segments := TList<TSignalArray>.Create;
+  try
+    for i := 0 to num_segments - 1 do
+    begin
+      // Safety break jika indeks melebihi batas
+      if (i * step + nperseg) > Length(x) then Break;
+
+      SetLength(segment, N_fft); // Alokasi ukuran penuh (termasuk padding)
+      // Isi data sinyal * window
+      for j := 0 to nperseg - 1 do
+        segment[j] := x[i*step + j] * window[j];
+      // Isi sisanya dengan 0 (Zero Padding)
+      for j := nperseg to N_fft - 1 do
+        segment[j] := 0;
+
+      FFT(segment, fft_complex);
+
+      SetLength(power_spectrum, Length(fft_complex));
+      // Normalisasi Power Spectrum
+      for j := 0 to High(fft_complex) do
+        power_spectrum[j] := (Sqr(fft_complex[j].Re) + Sqr(fft_complex[j].Im)) / (Fs * sum_sq_win);
+
+      psd_segments.Add(power_spectrum);
+    end;
+
+    if psd_segments.Count = 0 then Exit;
+
+    // Rata-rata segmen (Welch averaging)
+    SetLength(avg_psd, Length(psd_segments[0]));
+    for i := 0 to High(avg_psd) do
+    begin
+      avg_psd[i] := 0;
+      for j := 0 to psd_segments.Count - 1 do
+        avg_psd[i] := avg_psd[i] + psd_segments[j][i];
+      avg_psd[i] := avg_psd[i] / psd_segments.Count;
+    end;
+
+    // Ambil sisi positif spektrum (One-sided)
+    half := N_fft div 2;
+    SetLength(Psd, half);
+    Psd[0] := avg_psd[0];
+    for i := 1 to half - 1 do
+      Psd[i] := avg_psd[i] * 2; // Kali 2 untuk konservasi energi one-sided
+
+    SetLength(Freqs, half);
+    for i := 0 to half - 1 do
+      Freqs[i] := i * Fs / N_fft; // Sumbu frekuensi
+  finally
+    for i := 0 to psd_segments.Count - 1 do psd_segments[i] := nil; // Hapus referensi array
+    psd_segments.Free;
+  end;
+end;
+
+function TPPGAnalyzer.ExtractRateFromSignal(const Signal: TSignalArray; Fs: Double; FreqBandLow, FreqBandHigh: Double): Double;
+var
+  freqs, psd, smoothedPSD, signalNoDC: TSignalArray;
+  i, peakIdx: Integer;
+  maxPower, y1, y2, y3, delta, freqStep: Double;
+begin
+  Result := 0;
+  if (Length(Signal) < 10) or (Fs <= 0) then Exit;
+
+  // Detrending
+  SetLength(signalNoDC, Length(Signal));
+  for i := 0 to High(Signal) do signalNoDC[i] := Signal[i] - Mean(Signal);
+
+  // Hitung PSD resolusi tinggi
+  Welch(signalNoDC, Fs, freqs, psd, Length(Signal));
+  if Length(freqs) = 0 then Exit;
+
+  // Smoothing (3-point moving average)
+  SetLength(smoothedPSD, Length(psd));
+  for i := 0 to High(psd) do
+  begin
+    if (i = 0) or (i = High(psd)) then
+      smoothedPSD[i] := psd[i]
+    else
+      smoothedPSD[i] := (psd[i-1] + psd[i] + psd[i+1]) / 3.0;
+  end;
+
+  // Cari Puncak Kasar (Coarse Peak)
+  maxPower := -1.0;
+  peakIdx := -1;
+  for i := 0 to High(freqs) do
+  begin
+    if (freqs[i] >= FreqBandLow) and (freqs[i] <= FreqBandHigh) then
+    begin
+      if smoothedPSD[i] > maxPower then
+      begin
+        maxPower := smoothedPSD[i];
+        peakIdx := i;
+      end;
+    end;
+  end;
+
+  // Refinement: Interpolasi Parabola (Quinn's method simple version)
+  if (peakIdx > 0) and (peakIdx < High(smoothedPSD)) and (maxPower > 0.0001) then
+  begin
+    y1 := smoothedPSD[peakIdx - 1];
+    y2 := smoothedPSD[peakIdx];
+    y3 := smoothedPSD[peakIdx + 1];
+
+    if (2 * y2 - y1 - y3) <> 0 then
+      delta := 0.5 * (y1 - y3) / (y1 - 2 * y2 + y3)
+    else
+      delta := 0;
+
+    // Clamp delta
+    if delta > 0.5 then delta := 0.5 else if delta < -0.5 then delta := -0.5;
+
+    // Hitung frekuensi presisi
+    freqStep := freqs[1] - freqs[0];
+    Result := freqs[peakIdx] + (delta * freqStep); // Output dalam HERTZ
+  end
+  else if peakIdx <> -1 then
+  begin
+    Result := freqs[peakIdx];
+  end
+  else
+    Result := 0.0;
+end;
+
+function TPPGAnalyzer.CalculateQJFrequencyResponses(Fs: Double): TDictionary<Integer, TPair<TSignalArray, TSignalArray>>;
+var
+  j, k, i: Integer;
+  q_filter_dict: TDictionary<Integer, Double>;
+  min_k, max_k: Integer;
+  impulse_response: TSignalArray;
+  padded_signal: TSignalArray;
+  fft_out: TComplexArray;
+  N_fft, half: Integer;
+  freqs, mags: TSignalArray;
+  pair: TPair<TSignalArray, TSignalArray>;
+begin
+  Result := TDictionary<Integer, TPair<TSignalArray, TSignalArray>>.Create;
+
+  // Kita gunakan 2048 poin untuk resolusi frekuensi yang halus
+  N_fft := 2048;
+  half := N_fft div 2;
+
+  for j := 1 to 8 do
+  begin
+    if FQjTimeCoeffs.TryGetValue(j, q_filter_dict) then
+    begin
+      // 1. Konversi Dictionary Koefisien ke Array Impulse Response
+      min_k := MaxInt;
+      max_k := -MaxInt;
+      for k in q_filter_dict.Keys do
+      begin
+        if k < min_k then min_k := k;
+        if k > max_k then max_k := k;
+      end;
+
+      // Siapkan array zero-padded untuk FFT
+      SetLength(padded_signal, N_fft);
+      // Inisialisasi 0
+      for i := 0 to N_fft - 1 do padded_signal[i] := 0;
+
+      // Isi impulse response (digeser agar fit dalam array)
+      // Kita taruh di awal array (seperti input sinyal biasa)
+      for k in q_filter_dict.Keys do
+      begin
+        // Posisi relatif terhadap min_k
+        // Note: Posisi absolut waktu tidak mempengaruhi Magnitudo FFT, hanya Fase.
+        // Jadi kita bisa taruh koefisien berurutan di buffer.
+        i := k - min_k;
+        if (i >= 0) and (i < N_fft) then
+          padded_signal[i] := q_filter_dict[k];
+      end;
+
+      // 2. Lakukan FFT
+      FFT(padded_signal, fft_out);
+
+      // 3. Hitung Magnitudo (Spectrum)
+      SetLength(freqs, half);
+      SetLength(mags, half);
+
+      for i := 0 to half - 1 do
+      begin
+        // Frequency Axis: 0 .. Fs/2
+        freqs[i] := i * Fs / N_fft;
+        // Magnitude
+        mags[i] := Sqrt(Sqr(fft_out[i].Re) + Sqr(fft_out[i].Im));
+
+        // Normalisasi opsional (agar gain terlihat wajar)
+        // DWT filter coefficients di python code biasanya sangat kecil (1/1048576 dll)
+        // Kita biarkan raw magnitude untuk melihat respon relatifnya
+      end;
+
+      // Simpan hasil
+      pair := TPair<TSignalArray, TSignalArray>.Create(freqs, mags);
+      Result.Add(j, pair);
+    end;
+  end;
+end;
+
+{------------------------------------------------------------------------------}
+{                        Kalkulasi Fitur HRV Lengkap                           }
+{------------------------------------------------------------------------------}
+
+function TPPGAnalyzer.CalculateTimeDomain(const RRIntervals: TSignalArray; const PeakTimes: TSignalArray): TTimeDomainFeatures;
+var
+  i, j, k, nn50_count, N, cleanCount: Integer;
+  rr_ms, diffs: TSignalArray;
+  mean_nn, diff_val, sum_sq_diff, sum_cubed_diff: Double;
+  pop_sd: Double;
+
+  // Variabel untuk Sanitasi Data (Pembersihan)
+  CleanRR: TList<Double>;
+
+  // Variabel Histogram & Geometrik
+  minRR, maxRR, binWidth: Double;
+  numBins, binIdx, maxBinCount, idxMode: Integer;
+
+  // Variabel TINN
+  A, N_val, M_val, q_t, error, minError, bestN, bestM, t_val: Double;
+
+  // Variabel Segmented (SDANN)
+  TotalDuration, SegmentWin, s_start, s_end: Double;
+  s_means, s_stds, segment_rr: TList<Double>;
+begin
+  FillChar(Result, SizeOf(TTimeDomainFeatures), 0);
+
+  // === 1. SANITASI DATA (OUTLIER REMOVAL) ===
+  // Langkah ini krusial. Interval 200ms (300 bpm) adalah noise pada orang istirahat.
+  CleanRR := TList<Double>.Create;
+  try
+    for i := 0 to High(RRIntervals) do
+    begin
+      // Filter Fisiologis:
+      // Min 0.3s (300ms / 200 bpm)
+      // Max 2.0s (2000ms / 30 bpm)
+      if (RRIntervals[i] >= 0.30) and (RRIntervals[i] <= 2.0) then
+        CleanRR.Add(RRIntervals[i]);
+    end;
+
+    if CleanRR.Count < 5 then Exit; // Data terlalu sedikit setelah dibersihkan
+
+    // Konversi ke Array Milidetik untuk perhitungan selanjutnya
+    N := CleanRR.Count;
+    SetLength(rr_ms, N);
+    for i := 0 to N - 1 do rr_ms[i] := CleanRR[i] * 1000; // Detik -> ms
+  finally
+    CleanRR.Free;
+  end;
+
+  // === 2. STATISTIK LINEAR (Menggunakan Data Bersih) ===
+
+  // A. Mean HR & NN
+  mean_nn := Mean(rr_ms);
+  if mean_nn > 0 then Result.MeanHR := 60000 / mean_nn;
+
+  // B. Standard Deviations & Skewness
+  sum_sq_diff := 0;
+  sum_cubed_diff := 0;
+
+  for i := 0 to N - 1 do
+  begin
+    diff_val := rr_ms[i] - mean_nn;
+    sum_sq_diff := sum_sq_diff + (diff_val * diff_val);
+    sum_cubed_diff := sum_cubed_diff + (diff_val * diff_val * diff_val);
+  end;
+
+  if N > 1 then Result.SDNN := Sqrt(sum_sq_diff / (N - 1)) else Result.SDNN := 0;
+
+  if sum_sq_diff > 0 then
+  begin
+    pop_sd := Sqrt(sum_sq_diff / N);
+    Result.Skewness := (sum_cubed_diff / N) / (pop_sd * pop_sd * pop_sd);
+  end else Result.Skewness := 0;
+
+  // C. RMSSD & pNN50 (Successive Differences)
+  SetLength(diffs, N - 1);
+  sum_sq_diff := 0; nn50_count := 0;
+  for i := 0 to N - 2 do
+  begin
+    diffs[i] := rr_ms[i+1] - rr_ms[i];
+    sum_sq_diff := sum_sq_diff + Sqr(diffs[i]);
+    if Abs(diffs[i]) > 50 then Inc(nn50_count);
+  end;
+
+  if Length(diffs) > 0 then
+  begin
+    Result.RMSSD := Sqrt(sum_sq_diff / Length(diffs));
+    Result.SDSD := StdDev(diffs);
+    Result.NN50 := nn50_count;
+    Result.pNN50 := (nn50_count / Length(diffs)) * 100;
+  end;
+
+  if mean_nn > 0 then
+  begin
+    Result.CVNN := Result.SDNN / mean_nn;
+    Result.CVSD := Result.RMSSD / mean_nn;
+  end;
+
+  // === 3. SEGMENTED STATISTICS (SDANN) ===
+  // Kita gunakan PeakTimes asli untuk menentukan durasi,
+  // tapi hanya menghitung data yang VALID dalam window tersebut.
+  if Length(PeakTimes) > 1 then
+  begin
+    TotalDuration := PeakTimes[High(PeakTimes)] - PeakTimes[0];
+
+    // Aturan Window Adaptif
+    if TotalDuration >= 300 then SegmentWin := 300      // 5 Menit (Standar)
+    else if TotalDuration >= 60 then SegmentWin := 60   // 1 Menit (Short term)
+    else SegmentWin := TotalDuration;                   // Seadanya
+
+    if (TotalDuration > 0) and (SegmentWin > 0) then
+    begin
+      s_means := TList<Double>.Create;
+      s_stds := TList<Double>.Create;
+      try
+        s_start := PeakTimes[0];
+        // Iterasi per segmen waktu
+        while s_start + SegmentWin <= PeakTimes[High(PeakTimes)] do
+        begin
+          s_end := s_start + SegmentWin;
+          segment_rr := TList<Double>.Create;
+          try
+            // Cari RR interval (bersih) yang jatuh dalam rentang waktu ini.
+            // Karena rr_ms sudah kehilangan kaitan indeks langsung dengan PeakTimes akibat filtering,
+            // kita gunakan pendekatan simplifikasi:
+            // Asumsi: Distribusi artifact acak, kita ambil sampel rr_ms secara proporsional
+            // atau (better logic) kita filter ulang raw data khusus untuk segmen ini.
+
+            // Implementasi Robust untuk SDANN: Filter ulang per segmen
+            for i := 0 to High(RRIntervals) do
+            begin
+              // Cek apakah beat ini ada di window waktu s_start s/d s_end
+              if (i < Length(PeakTimes)) and (PeakTimes[i] >= s_start) and (PeakTimes[i] < s_end) then
+              begin
+                // Validasi nilai RR lagi
+                if (RRIntervals[i] >= 0.30) and (RRIntervals[i] <= 2.0) then
+                   segment_rr.Add(RRIntervals[i] * 1000);
+              end;
+            end;
+
+            if segment_rr.Count > 2 then
+            begin
+              s_means.Add(Mean(segment_rr.ToArray));
+              s_stds.Add(StdDev(segment_rr.ToArray));
+            end;
+          finally
+            segment_rr.Free;
+          end;
+          s_start := s_end;
+        end;
+
+        if s_means.Count > 1 then Result.SDANN := StdDev(s_means.ToArray);
+        if s_stds.Count > 0 then Result.SDNNIndex := Mean(s_stds.ToArray);
+      finally
+        s_means.Free; s_stds.Free;
+      end;
+    end;
+  end;
+
+  // === 4. GEOMETRIC MEASURES (Menggunakan rr_ms bersih) ===
+  // (Logika histogram tetap sama, tapi input datanya sudah bersih dari noise 200ms)
+  if Length(rr_ms) > 0 then
+  begin
+    minRR := rr_ms[0]; maxRR := rr_ms[0];
+    for i := 1 to High(rr_ms) do
+    begin
+      if rr_ms[i] < minRR then minRR := rr_ms[i];
+      if rr_ms[i] > maxRR then maxRR := rr_ms[i];
+    end;
+
+    binWidth := 50.0; // 50ms bin
+    if maxRR = minRR then numBins := 1 else numBins := Floor((maxRR - minRR) / binWidth) + 1;
+
+    SetLength(Result.RRHistogramCounts, numBins);
+    SetLength(Result.RRHistogramBins, numBins);
+
+    for i := 0 to numBins - 1 do
+    begin
+      Result.RRHistogramCounts[i] := 0;
+      Result.RRHistogramBins[i] := minRR + (i * binWidth) + (binWidth / 2);
+    end;
+
+    maxBinCount := 0; idxMode := 0;
+    for i := 0 to High(rr_ms) do
+    begin
+      binIdx := Floor((rr_ms[i] - minRR) / binWidth);
+      if (binIdx >= 0) and (binIdx < numBins) then
+      begin
+        Inc(Result.RRHistogramCounts[binIdx]);
+        if Result.RRHistogramCounts[binIdx] > maxBinCount then
+        begin
+          maxBinCount := Result.RRHistogramCounts[binIdx];
+          idxMode := binIdx;
+        end;
+      end;
+    end;
+
+    if maxBinCount > 0 then Result.HTI := Length(rr_ms) / maxBinCount else Result.HTI := 0;
+
+    // Logika TINN (Triangular Interpolation)
+    if (numBins > 1) and (maxBinCount > 0) then
+    begin
+      minError := MaxDouble;
+      bestN := Result.RRHistogramBins[0];
+      bestM := Result.RRHistogramBins[High(Result.RRHistogramBins)];
+      A := maxBinCount;
+
+      for i := 0 to idxMode do
+      begin
+        for j := idxMode to numBins - 1 do
+        begin
+          N_val := Result.RRHistogramBins[i]; M_val := Result.RRHistogramBins[j];
+          if M_val = N_val then Continue;
+          error := 0;
+          for k := 0 to numBins - 1 do
+          begin
+            t_val := Result.RRHistogramBins[k];
+            // Rumus Segitiga q(t)
+            if (t_val >= N_val) and (t_val <= Result.RRHistogramBins[idxMode]) then
+              if (Result.RRHistogramBins[idxMode]-N_val)<>0 then q_t := A*(t_val-N_val)/(Result.RRHistogramBins[idxMode]-N_val) else q_t:=A
+            else if (t_val > Result.RRHistogramBins[idxMode]) and (t_val <= M_val) then
+              if (M_val-Result.RRHistogramBins[idxMode])<>0 then q_t := A*(M_val-t_val)/(M_val-Result.RRHistogramBins[idxMode]) else q_t:=A
+            else q_t := 0;
+
+            error := error + Sqr(Result.RRHistogramCounts[k] - q_t);
+          end;
+          if error < minError then begin minError := error; bestN := N_val; bestM := M_val; end;
+        end;
+      end;
+      Result.TINN := bestM - bestN;
+      Result.TINN_N := bestN; Result.TINN_M := bestM;
+      Result.TINN_Mode := Result.RRHistogramBins[idxMode]; Result.TINN_Height := maxBinCount;
+    end
+    else Result.TINN := 0;
+  end;
+end;
+
+function TPPGAnalyzer.CalculateFrequencyDomain(const RRIntervals, PeakTimes: TSignalArray; InterpFs: Double): TFrequencyDomainFeatures;
+var
+  interpTime, interpRR, freqs, psd: TSignalArray;
+  i, j: Integer;
+  freqStep, lf_power_sum, hf_power_sum, vlf_power_sum: Double;
+  max_lf_val, max_hf_val: Double;
+
+  // Variabel Sanitasi
+  CleanRR, CleanTimes: TList<Double>;
+  ValidRR, ValidTimes: TSignalArray;
+begin
+  FillChar(Result, SizeOf(TFrequencyDomainFeatures), 0);
+  if Length(RRIntervals) < 10 then Exit;
+
+  // === 1. SANITASI DATA (Wajib untuk Frequency Domain) ===
+  // Jika ada artifact tajam di RR, spektrum akan kacau (broadband noise).
+  CleanRR := TList<Double>.Create;
+  CleanTimes := TList<Double>.Create;
+  try
+    // Kita asumsikan PeakTimes[i] adalah waktu terjadinya detak ke-i
+    // RRIntervals[i] adalah interval antara i dan i+1.
+    // Kita harus menjaga pasangan (Waktu, Nilai) agar interpolasi Spline akurat.
+    for i := 0 to High(RRIntervals) do
+    begin
+      if (RRIntervals[i] >= 0.30) and (RRIntervals[i] <= 2.0) then
+      begin
+        CleanRR.Add(RRIntervals[i]);
+        if i < Length(PeakTimes) then
+           CleanTimes.Add(PeakTimes[i]);
+      end;
+    end;
+
+    if CleanRR.Count < 5 then Exit;
+    ValidRR := CleanRR.ToArray;
+    ValidTimes := CleanTimes.ToArray;
+  finally
+    CleanRR.Free;
+    CleanTimes.Free;
+  end;
+
+  // === 2. INTERPOLASI & RESAMPLING ===
+  // Buat grid waktu yang seragam (Uniformly sampled)
+  SetLength(interpTime, Round((ValidTimes[High(ValidTimes)] - ValidTimes[0]) * InterpFs));
+  for i := 0 to High(interpTime) do
+    interpTime[i] := ValidTimes[0] + i / InterpFs;
+
+  // Interpolasi Cubic Spline (Mengubah data diskrit non-uniform menjadi uniform)
+  interpRR := CubicSplineInterpolate(ValidTimes, ValidRR, interpTime);
+
+  // === 3. DETRENDING & WINDOWING ===
+  // Hilangkan DC Component dan trend lambat
+  LinearDetrend(interpRR);
+
+  // Welch's Method (FFT dengan averaging dan windowing)
+  Welch(interpRR, InterpFs, freqs, psd, Min(512, Length(interpRR)));
+
+  if Length(freqs) < 2 then Exit;
+
+  // === 4. KONVERSI SATUAN (s^2/Hz -> ms^2/Hz) ===
+  for i := 0 to High(psd) do
+    psd[i] := psd[i] * 1000000; // Kali 1 Juta
+
+  Result.PSD_Freqs := freqs;
+  Result.PSD_Values := psd;
+
+  // === 5. INTEGRASI & PEAK DETECTION ===
+  freqStep := freqs[1] - freqs[0];
+  lf_power_sum := 0; hf_power_sum := 0; vlf_power_sum := 0;
+
+  Result.Peak_LF := 0; Result.Peak_HF := 0;
+  max_lf_val := -1.0; max_hf_val := -1.0;
+
+  for i := 0 to High(freqs) do
+  begin
+    // VLF Band (0.0033 - 0.04 Hz)
+    if (freqs[i] >= 0.0033) and (freqs[i] < 0.04) then
+      vlf_power_sum := vlf_power_sum + psd[i];
+
+    // LF Band (0.04 - 0.15 Hz)
+    if (freqs[i] >= 0.04) and (freqs[i] < 0.15) then
+    begin
+      lf_power_sum := lf_power_sum + psd[i];
+
+      // Logika Peak: Simpan frekuensi dimana Power-nya Maksimal
+      if psd[i] > max_lf_val then
+      begin
+        max_lf_val := psd[i];
+        Result.Peak_LF := freqs[i];
+      end;
+    end;
+
+    // HF Band (0.15 - 0.5 Hz)
+    // Diperluas ke 0.5Hz untuk mengakomodasi RSA frekuensi tinggi,
+    // meskipun setelah sanitasi, kemungkinan besar puncak artifact di 0.4Hz akan hilang.
+    if (freqs[i] >= 0.15) and (freqs[i] < 0.5) then
+    begin
+      hf_power_sum := hf_power_sum + psd[i];
+
+      // Logika Peak
+      if psd[i] > max_hf_val then
+      begin
+        max_hf_val := psd[i];
+        Result.Peak_HF := freqs[i];
+      end;
+    end;
+  end;
+
+  // === 6. HASIL AKHIR ===
+  Result.VLF_Power   := vlf_power_sum * freqStep;
+  Result.LF_Power    := lf_power_sum * freqStep;
+  Result.HF_Power    := hf_power_sum * freqStep;
+
+  // Total Power konsisten (Penjumlahan komponen)
+  Result.Total_Power := Result.VLF_Power + Result.LF_Power + Result.HF_Power;
+
+  if Result.HF_Power > 0 then
+    Result.LF_HF_Ratio := Result.LF_Power / Result.HF_Power;
+
+  if (Result.LF_Power + Result.HF_Power) > 0 then
+  begin
+    Result.LF_nu := Result.LF_Power / (Result.LF_Power + Result.HF_Power) * 100;
+    Result.HF_nu := Result.HF_Power / (Result.LF_Power + Result.HF_Power) * 100;
+  end;
+end;
+
+function TPPGAnalyzer.CalculateNonLinear(const RRIntervals: TSignalArray): TNonLinearFeatures;
+// ... [Implementation from your original code, it's correct]
+var rr_n, rr_n1, diff_rr, sum_rr: TSignalArray; i: integer;
+begin
+ if Length(RRIntervals) < 2 then
+ begin
+   FillChar(Result, SizeOf(TNonLinearFeatures), 0);
+   Exit;
+ end;
+ SetLength(rr_n, High(RRIntervals)); SetLength(rr_n1, High(RRIntervals));
+ for i := 0 to High(rr_n) do
+ begin
+   rr_n[i] := RRIntervals[i] * 1000;
+   rr_n1[i] := RRIntervals[i+1] * 1000;
+ end;
+ Result.PoincareX := Copy(rr_n); Result.PoincareY := Copy(rr_n1);
+ SetLength(diff_rr, Length(rr_n)); SetLength(sum_rr, Length(rr_n));
+ for i := 0 to High(rr_n) do
+ begin
+   diff_rr[i] := (rr_n[i] - rr_n1[i]) / Sqrt(2);
+   sum_rr[i] := (rr_n[i] + rr_n1[i]) / Sqrt(2);
+ end;
+ Result.SD1 := StdDev(diff_rr); Result.SD2 := StdDev(sum_rr);
+ if Result.SD2 > 0 then Result.SD1_SD2_Ratio := Result.SD1 / Result.SD2 else Result.SD1_SD2_Ratio := 0;
+end;
+
+end.

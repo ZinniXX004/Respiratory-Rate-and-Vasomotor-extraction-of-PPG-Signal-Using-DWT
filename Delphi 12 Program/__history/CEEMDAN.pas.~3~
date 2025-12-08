@@ -1,0 +1,475 @@
+unit CEEMDAN;
+
+interface
+
+uses
+  System.SysUtils, System.Math, System.Generics.Collections;
+
+type
+  TSignalArray = TArray<Double>;
+
+  { Tipe Data Record untuk Menyimpan Hasil HRV }
+  TTimeDomainFeatures = record
+    MeanHR: Double;
+    SDNN: Double;
+    RMSSD: Double;
+    pNN50: Double;
+  end;
+
+  TFrequencyDomainFeatures = record
+    PSD_Freqs: TSignalArray;
+    PSD_Values: TSignalArray;
+    VLF_Power: Double;
+    LF_Power: Double;
+    HF_Power: Double;
+    LF_HF_Ratio: Double;
+  end;
+
+  TNonLinearFeatures = record
+    PoincareX: TSignalArray;
+    PoincareY: TSignalArray;
+    SD1: Double;
+    SD2: Double;
+    SD1_SD2_Ratio: Double;
+  end;
+
+  { Kelas Penganalisis Utama }
+  TCEEMDANAnalyzer = class
+  private
+    { Fungsi Matematika & Statistik Dasar (From Scratch) }
+    function Mean(const Arr: TSignalArray): Double;
+    function StdDev(const Arr: TSignalArray): Double;
+    function SumOfSquares(const Arr: TSignalArray): Double;
+
+    { Fungsi Inti EMD (From Scratch) }
+    procedure FindExtrema(const Signal: TSignalArray; out MaximaIdx, MinimaIdx: TArray<Integer>);
+    function CubicSplineInterpolate(const X, Y: TSignalArray; const Xi: TSignalArray): TSignalArray;
+    function GenerateGaussianNoise(Count: Integer; Amplitude: Double): TSignalArray;
+    function Sift(const Signal: TSignalArray; StopStdDev: Double): TSignalArray;
+
+    { Fungsi Analisis HRV (Kerangka Kerja) }
+    procedure ButterworthBandpassCoeffs(Fs, LowCut, HighCut: Double; Order: Integer; out b, a: TSignalArray);
+    function FilterSignal(const Signal, b, a: TSignalArray): TSignalArray;
+    procedure Welch(const Signal: TSignalArray; Fs: Double; out Freqs, Psd: TSignalArray; SegmentLen: Integer; OverlapRatio: Double);
+  public
+    constructor Create;
+    { Alur Kerja Utama }
+    procedure Downsample(const SignalIn, TimeIn: TSignalArray; Factor: Integer;
+      out SignalOut, TimeOut: TSignalArray; out NewFs: Double);
+    procedure Decompose_CEEMDAN(const Signal: TSignalArray; Fs: Double;
+      out IMFs: TList<TSignalArray>; out Residue: TSignalArray;
+      EnsembleSize: Integer = 100; NoiseAmplitudeFactor: Double = 0.2; MaxIMFs: Integer = 10);
+    function SelectAndReconstructHRVSignal(const IMFs: TList<TSignalArray>; Fs: Double): TSignalArray;
+
+    { Alur Kerja Analisis HRV }
+    function PreprocessHRVSignal(const Signal: TSignalArray; Fs: Double): TSignalArray;
+    procedure DetectPeaks(const Signal, Time: TSignalArray;
+      out Peaks: TArray<Integer>; out RRIntervals, PeakTimes: TSignalArray);
+    function CalculateTimeDomain(const RRIntervals: TSignalArray): TTimeDomainFeatures;
+    function CalculateFrequencyDomain(const RRIntervals, PeakTimes: TSignalArray): TFrequencyDomainFeatures;
+    function CalculateNonLinear(const RRIntervals: TSignalArray): TNonLinearFeatures;
+  end;
+
+implementation
+
+{==============================================================================}
+{                        TCEEMDANAnalyzer Implementation                       }
+{==============================================================================}
+
+constructor TCEEMDANAnalyzer.Create;
+begin
+  inherited;
+  Randomize;
+end;
+
+{------------------------------------------------------------------------------}
+{                Fungsi Matematika & Statistik Dasar (From Scratch)            }
+{------------------------------------------------------------------------------}
+
+function TCEEMDANAnalyzer.Mean(const Arr: TSignalArray): Double;
+var i: Integer; sum: Double;
+begin
+  sum := 0.0;
+  for i := 0 to High(Arr) do sum := sum + Arr[i];
+  if Length(Arr) > 0 then Result := sum / Length(Arr) else Result := 0;
+end;
+
+function TCEEMDANAnalyzer.StdDev(const Arr: TSignalArray): Double;
+var i: Integer; m, variance: Double;
+begin
+ m := Mean(Arr);
+ variance := 0.0;
+ if Length(Arr) > 1 then
+ begin
+   for i := 0 to High(Arr) do variance := variance + Sqr(Arr[i] - m);
+   Result := Sqrt(variance / (Length(Arr) - 1));
+ end else Result := 0;
+end;
+
+function TCEEMDANAnalyzer.SumOfSquares(const Arr: TSignalArray): Double;
+var i: integer; sum: double;
+begin
+  sum := 0;
+  for i := 0 to High(Arr) do sum := sum + Sqr(Arr[i]);
+  Result := sum;
+end;
+
+{------------------------------------------------------------------------------}
+{                       Fungsi Inti EMD (From Scratch)                         }
+{------------------------------------------------------------------------------}
+
+procedure TCEEMDANAnalyzer.FindExtrema(const Signal: TSignalArray; out MaximaIdx, MinimaIdx: TArray<Integer>);
+var
+  i: Integer;
+  maxList, minList: TList<Integer>;
+begin
+  maxList := TList<Integer>.Create;
+  minList := TList<Integer>.Create;
+  try
+    if Length(Signal) < 3 then
+    begin
+      SetLength(MaximaIdx, 0);
+      SetLength(MinimaIdx, 0);
+      Exit;
+    end;
+    if (Signal[0] > Signal[1]) then maxList.Add(0);
+    if (Signal[0] < Signal[1]) then minList.Add(0);
+    for i := 1 to High(Signal) - 1 do
+    begin
+      if (Signal[i] > Signal[i-1]) and (Signal[i] >= Signal[i+1]) then maxList.Add(i);
+      if (Signal[i] < Signal[i-1]) and (Signal[i] <= Signal[i+1]) then minList.Add(i);
+    end;
+    if (Signal[High(Signal)] > Signal[High(Signal)-1]) then maxList.Add(High(Signal));
+    if (Signal[High(Signal)] < Signal[High(Signal)-1]) then minList.Add(High(Signal));
+    MaximaIdx := maxList.ToArray;
+    MinimaIdx := minList.ToArray;
+  finally
+    maxList.Free;
+    minList.Free;
+  end;
+end;
+
+// ================== PERBAIKAN FINAL DI FUNGSI INI ==================
+function TCEEMDANAnalyzer.CubicSplineInterpolate(const X, Y: TSignalArray; const Xi: TSignalArray): TSignalArray;
+var
+  n, i, k: Integer;
+  h, alpha, l, mu, z: TSignalArray;
+  // PERBAIKAN: B, C, D dideklarasikan sebagai array
+  B, C, D: TSignalArray;
+  dx: Double;
+begin
+  n := Length(X);
+  SetLength(Result, Length(Xi));
+  if n < 2 then
+  begin
+    for i := 0 to High(Xi) do
+    begin
+      if n = 1 then Result[i] := Y[0] else Result[i] := 0.0;
+    end;
+    Exit;
+  end;
+  if n = 2 then
+  begin
+     for i := 0 to High(Xi) do
+     begin
+        if (X[1] - X[0]) <> 0 then
+          Result[i] := Y[0] + (Y[1] - Y[0]) * (Xi[i] - X[0]) / (X[1] - X[0])
+        else
+          Result[i] := Y[0];
+     end;
+     Exit;
+  end;
+
+  SetLength(h, n - 1);
+  for i := 0 to n - 2 do
+    h[i] := X[i+1] - X[i];
+
+  SetLength(alpha, n - 1);
+  alpha[0] := 0; // Tidak digunakan, tapi untuk konsistensi ukuran
+  for i := 1 to n - 2 do
+    alpha[i] := (3/h[i]) * (Y[i+1] - Y[i]) - (3/h[i-1]) * (Y[i] - Y[i-1]);
+
+  SetLength(l, n);
+  SetLength(mu, n);
+  SetLength(z, n);
+
+  l[0] := 1;
+  mu[0] := 0;
+  z[0] := 0;
+
+  for i := 1 to n - 2 do
+  begin
+    l[i] := 2 * (X[i+1] - X[i-1]) - h[i-1] * mu[i-1];
+    if l[i] <> 0 then mu[i] := h[i] / l[i];
+    if l[i] <> 0 then z[i] := (alpha[i] - h[i-1] * z[i-1]) / l[i];
+  end;
+
+  l[n-1] := 1;
+  z[n-1] := 0;
+
+  // PERBAIKAN: Menggunakan C sebagai TSignalArray
+  SetLength(C, n);
+  C[n-1] := 0;
+  for i := n - 2 downto 0 do
+    C[i] := z[i] - mu[i] * C[i+1];
+
+  // PERBAIKAN: Menggunakan B dan D sebagai TSignalArray
+  SetLength(B, n - 1);
+  SetLength(D, n - 1);
+  for i := 0 to n - 2 do
+  begin
+    if h[i] <> 0 then
+    begin
+      D[i] := (C[i+1] - C[i]) / (3 * h[i]);
+      B[i] := (Y[i+1] - Y[i]) / h[i] - h[i] * (C[i+1] + 2 * C[i]) / 3;
+    end
+    else
+    begin
+      D[i] := 0;
+      B[i] := 0;
+    end;
+  end;
+
+  for i := 0 to High(Xi) do
+  begin
+    k := 0;
+    while (k < n - 2) and (X[k+1] < Xi[i]) do
+      Inc(k);
+
+    dx := Xi[i] - X[k];
+    Result[i] := Y[k] + B[k] * dx + C[k] * Sqr(dx) + D[k] * Power(dx, 3);
+  end;
+end;
+// =======================================================
+
+
+function TCEEMDANAnalyzer.GenerateGaussianNoise(Count: Integer; Amplitude: Double): TSignalArray;
+var i: Integer; u1, u2, z1: Double;
+begin
+  SetLength(Result, Count);
+  i := 0;
+  while i < Count do
+  begin
+    u1 := 1.0 - Random();
+    u2 := Random();
+    z1 := Sqrt(-2.0 * Ln(u1)) * Cos(2 * PI * u2);
+    Result[i] := z1 * Amplitude;
+    Inc(i);
+  end;
+end;
+
+function TCEEMDANAnalyzer.Sift(const Signal: TSignalArray; StopStdDev: Double): TSignalArray;
+var
+  h, prev_h, mean_env, upper_env, lower_env, all_indices: TSignalArray;
+  maximaIdx, minimaIdx: TArray<Integer>;
+  maximaX, maximaY, minimaX, minimaY: TSignalArray;
+  i, iter: Integer;
+  sd, sum_sq_diff, sum_sq_prev: Double;
+begin
+  h := Copy(Signal);
+  iter := 0;
+  repeat
+    prev_h := Copy(h);
+    FindExtrema(h, maximaIdx, minimaIdx);
+    if (Length(maximaIdx) < 3) or (Length(minimaIdx) < 3) then Break;
+    SetLength(maximaX, Length(maximaIdx)); SetLength(maximaY, Length(maximaIdx));
+    for i := 0 to High(maximaIdx) do begin maximaX[i] := maximaIdx[i]; maximaY[i] := h[maximaIdx[i]]; end;
+    SetLength(minimaX, Length(minimaIdx)); SetLength(minimaY, Length(minimaIdx));
+    for i := 0 to High(minimaIdx) do begin minimaX[i] := minimaIdx[i]; minimaY[i] := h[minimaIdx[i]]; end;
+    SetLength(all_indices, Length(h));
+    for i := 0 to High(h) do all_indices[i] := i;
+    upper_env := CubicSplineInterpolate(maximaX, maximaY, all_indices);
+    lower_env := CubicSplineInterpolate(minimaX, minimaY, all_indices);
+    SetLength(mean_env, Length(h));
+    for i := 0 to High(h) do mean_env[i] := (upper_env[i] + lower_env[i]) / 2.0;
+    for i := 0 to High(h) do h[i] := h[i] - mean_env[i];
+    sum_sq_diff := 0.0;
+    for i := 0 to High(h) do sum_sq_diff := sum_sq_diff + Sqr(prev_h[i] - h[i]);
+    sum_sq_prev := SumOfSquares(prev_h);
+    if sum_sq_prev > 1E-12 then sd := sum_sq_diff / sum_sq_prev else sd := 1.0;
+    Inc(iter);
+  until (sd < StopStdDev) or (iter > 500);
+  Result := h;
+end;
+
+procedure TCEEMDANAnalyzer.Decompose_CEEMDAN(const Signal: TSignalArray; Fs: Double;
+  out IMFs: TList<TSignalArray>; out Residue: TSignalArray;
+  EnsembleSize: Integer; NoiseAmplitudeFactor: Double; MaxIMFs: Integer);
+var
+  currentResidue, noise, noisySignal, tempIMF, avgIMF: TSignalArray;
+  i, j, k: Integer;
+  std_dev_residue: Double;
+  tempMax, tempMin: TArray<Integer>;
+begin
+  IMFs.Clear;
+  currentResidue := Copy(Signal);
+  for k := 1 to MaxIMFs do
+  begin
+    std_dev_residue := StdDev(currentResidue);
+    if std_dev_residue < 1E-9 * StdDev(Signal) then Break;
+    SetLength(avgIMF, Length(Signal));
+    for j := 1 to EnsembleSize do
+    begin
+      noise := GenerateGaussianNoise(Length(Signal), NoiseAmplitudeFactor * std_dev_residue);
+      SetLength(noisySignal, Length(currentResidue));
+      for i := 0 to High(noisySignal) do noisySignal[i] := currentResidue[i] + noise[i];
+      tempIMF := Sift(noisySignal, 0.2);
+      for i := 0 to High(avgIMF) do
+        avgIMF[i] := avgIMF[i] + tempIMF[i];
+    end;
+    for i := 0 to High(avgIMF) do
+      avgIMF[i] := avgIMF[i] / EnsembleSize;
+    IMFs.Add(avgIMF);
+    for i := 0 to High(currentResidue) do
+       currentResidue[i] := currentResidue[i] - avgIMF[i];
+    FindExtrema(currentResidue, tempMax, tempMin);
+    if (Length(tempMax) < 3) or (Length(tempMin) < 3) then
+      Break;
+  end;
+  Residue := currentResidue;
+end;
+
+{------------------------------------------------------------------------------}
+{                        Fungsi Alur Kerja Analisis                            }
+{------------------------------------------------------------------------------}
+procedure TCEEMDANAnalyzer.Downsample(const SignalIn, TimeIn: TSignalArray; Factor: Integer;
+  out SignalOut, TimeOut: TSignalArray; out NewFs: Double);
+var i, newSize: Integer;
+begin
+  if (Factor <= 1) or (Length(SignalIn) = 0) then
+  begin
+    SignalOut := Copy(SignalIn); TimeOut := Copy(TimeIn);
+    if Length(TimeIn) > 1 then NewFs := (Length(TimeIn) - 1) / (TimeIn[High(TimeIn)] - TimeIn[0]) else NewFs := 0;
+    Exit;
+  end;
+  newSize := Length(SignalIn) div Factor;
+  SetLength(SignalOut, newSize); SetLength(TimeOut, newSize);
+  for i := 0 to newSize - 1 do
+  begin
+    SignalOut[i] := SignalIn[i * Factor]; TimeOut[i] := TimeIn[i * Factor];
+  end;
+  if Length(TimeOut) > 1 then NewFs := (Length(TimeOut) - 1) / (TimeOut[High(TimeOut)] - TimeOut[0]) else NewFs := 0;
+end;
+
+function TCEEMDANAnalyzer.SelectAndReconstructHRVSignal(const IMFs: TList<TSignalArray>; Fs: Double): TSignalArray;
+var i, j, startIMF, endIMF: Integer;
+begin
+  SetLength(Result, 0);
+  if IMFs.Count < 2 then Exit;
+  SetLength(Result, Length(IMFs[0]));
+  startIMF := 1;
+  endIMF := Min(4, IMFs.Count - 1);
+  for i := startIMF to endIMF do
+    for j := 0 to High(Result) do
+      Result[j] := Result[j] + IMFs[i][j];
+end;
+
+function TCEEMDANAnalyzer.PreprocessHRVSignal(const Signal: TSignalArray; Fs: Double): TSignalArray;
+var m: Double; i: Integer;
+begin
+  m := Mean(Signal);
+  SetLength(Result, Length(Signal));
+  for i := 0 to High(Signal) do
+    Result[i] := Signal[i] - m;
+end;
+
+procedure TCEEMDANAnalyzer.DetectPeaks(const Signal, Time: TSignalArray; out Peaks: TArray<Integer>; out RRIntervals, PeakTimes: TSignalArray);
+var i, minPeakDist: Integer; peakList: TList<Integer>; fs_est: Double;
+begin
+  peakList := TList<Integer>.Create;
+  try
+    if Length(Time) > 1 then fs_est := (Length(Time) - 1) / (Time[High(Time)] - Time[0])
+    else fs_est := 1;
+    minPeakDist := Round(0.3 * fs_est);
+    for i := 1 to High(Signal) - 1 do
+      if (Signal[i] > Signal[i-1]) and (Signal[i] > Signal[i+1]) then
+        if (peakList.Count = 0) or (i - peakList.Last > minPeakDist) then
+          peakList.Add(i);
+    Peaks := peakList.ToArray;
+  finally
+    peakList.Free;
+  end;
+  if Length(Peaks) > 1 then
+  begin
+    SetLength(RRIntervals, Length(Peaks) - 1);
+    SetLength(PeakTimes, Length(Peaks) - 1);
+    for i := 0 to High(RRIntervals) do
+    begin
+      RRIntervals[i] := Time[Peaks[i+1]] - Time[Peaks[i]];
+      PeakTimes[i] := Time[Peaks[i+1]];
+    end;
+  end else
+  begin
+     SetLength(RRIntervals, 0);
+     SetLength(PeakTimes, 0);
+  end;
+end;
+
+function TCEEMDANAnalyzer.CalculateTimeDomain(const RRIntervals: TSignalArray): TTimeDomainFeatures;
+var i, nn50: Integer; rr_ms, diffs: TSignalArray;
+begin
+  FillChar(Result, SizeOf(TTimeDomainFeatures), 0);
+  if Length(RRIntervals) < 2 then Exit;
+  SetLength(rr_ms, Length(RRIntervals));
+  for i := 0 to High(rr_ms) do rr_ms[i] := RRIntervals[i] * 1000;
+  Result.SDNN := StdDev(rr_ms);
+  SetLength(diffs, High(rr_ms));
+  nn50 := 0;
+  for i := 0 to High(diffs) do
+  begin
+    diffs[i] := Sqr(rr_ms[i+1] - rr_ms[i]);
+    if Abs(rr_ms[i+1] - rr_ms[i]) > 50 then Inc(nn50);
+  end;
+  Result.RMSSD := Sqrt(Mean(diffs));
+  if Length(rr_ms)>0 then Result.pNN50 := (nn50 / Length(rr_ms)) * 100;
+  if Mean(RRIntervals)>0 then Result.MeanHR := 60 / Mean(RRIntervals);
+end;
+
+function TCEEMDANAnalyzer.CalculateFrequencyDomain(const RRIntervals, PeakTimes: TSignalArray): TFrequencyDomainFeatures;
+begin
+  FillChar(Result, SizeOf(TFrequencyDomainFeatures), 0);
+end;
+
+function TCEEMDANAnalyzer.CalculateNonLinear(const RRIntervals: TSignalArray): TNonLinearFeatures;
+var rr_n, rr_n1, diff_rr, sum_rr: TSignalArray; i: integer;
+begin
+ if Length(RRIntervals) < 2 then
+ begin
+   FillChar(Result, SizeOf(TNonLinearFeatures), 0);
+   Exit;
+ end;
+ SetLength(rr_n, High(RRIntervals));
+ SetLength(rr_n1, High(RRIntervals));
+ for i := 0 to High(rr_n) do
+ begin
+   rr_n[i] := RRIntervals[i] * 1000;
+   rr_n1[i] := RRIntervals[i+1] * 1000;
+ end;
+ Result.PoincareX := Copy(rr_n);
+ Result.PoincareY := Copy(rr_n1);
+ SetLength(diff_rr, Length(rr_n));
+ SetLength(sum_rr, Length(rr_n));
+ for i := 0 to High(rr_n) do
+ begin
+   diff_rr[i] := (rr_n[i] - rr_n1[i]) / Sqrt(2);
+   sum_rr[i] := (rr_n[i] + rr_n1[i]) / Sqrt(2);
+ end;
+ Result.SD1 := StdDev(diff_rr);
+ Result.SD2 := StdDev(sum_rr);
+ if Result.SD2 > 0 then Result.SD1_SD2_Ratio := Result.SD1 / Result.SD2 else Result.SD1_SD2_Ratio := 0;
+end;
+
+procedure TCEEMDANAnalyzer.ButterworthBandpassCoeffs(Fs, LowCut, HighCut: Double; Order: Integer; out b, a: TSignalArray);
+begin
+end;
+
+function TCEEMDANAnalyzer.FilterSignal(const Signal, b, a: TSignalArray): TSignalArray;
+begin
+  Result := Copy(Signal);
+end;
+
+procedure TCEEMDANAnalyzer.Welch(const Signal: TSignalArray; Fs: Double; out Freqs, Psd: TSignalArray; SegmentLen: Integer; OverlapRatio: Double);
+begin
+end;
+
+end.

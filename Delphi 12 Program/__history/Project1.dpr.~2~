@@ -1,0 +1,13 @@
+program Project1;
+
+uses
+  Vcl.Forms,
+  CEEMDAN in 'CEEMDAN.pas';
+
+{$R *.res}
+
+begin
+  Application.Initialize;
+  Application.MainFormOnTaskbar := True;
+  Application.Run;
+end.

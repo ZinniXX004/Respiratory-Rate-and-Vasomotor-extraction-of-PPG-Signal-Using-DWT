@@ -1,0 +1,1593 @@
+unit Unit1;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.ComCtrls,
+  System.StrUtils, VCLTee.Series, VCLTee.TeCanvas, VCLTee.TeeShape, VCLTee.TeeGDIPlus, VclTee.TeEngine,
+  VclTee.TeeProcs, VclTee.Chart, System.Math, System.Generics.Collections,
+  Vcl.Samples.Spin, PPGAnalyzer, Vcl.Buttons;
+
+type
+  TSignalArray = TArray<Double>;
+
+  TForm1 = class(TForm)
+    PanelTop: TPanel;
+    btnLoadData: TButton;
+    btnProcess: TButton;
+    PageControlMain: TPageControl;
+    MemoLog: TMemo;
+    OpenDialogPPG: TOpenDialog;
+    GroupBoxControls: TGroupBox;
+    SpinEditDownsample: TSpinEdit;
+    Label1: TLabel;
+    Label2: TLabel;
+    edtColumnName: TEdit;
+    GroupBoxSourceSelection: TGroupBox;
+    Label5: TLabel;
+    Label6: TLabel;
+    Label7: TLabel;
+    cbHRVSource: TComboBox;
+    cbRRSource: TComboBox;
+    cbVMASource: TComboBox;
+    GroupBoxPhysRates: TGroupBox;
+    Label4: TLabel;
+    edtRespRate: TEdit;
+    LabelVasoRate: TLabel;
+    edtVasoRate: TEdit;
+    TabSheetSignalProcessing: TTabSheet;
+    SplitterSP_H1: TSplitter;
+    SplitterSP_H2: TSplitter;
+    PanelSP1: TPanel;
+    SplitterSP_V1: TSplitter;
+    ChartRawSignal: TChart;
+    SeriesRaw: TLineSeries;
+    ChartFFTRaw: TChart;
+    SeriesFFTRaw: TLineSeries;
+    PanelSP2: TPanel;
+    SplitterSP_V2: TSplitter;
+    ChartDownsampled: TChart;
+    SeriesDownsampled: TLineSeries;
+    ChartFFTDownsampled: TChart;
+    SeriesFFTDownsampled: TLineSeries;
+    PanelSP3: TPanel;
+    SplitterSP_V3: TSplitter;
+    ChartPreprocessed: TChart;
+    SeriesPreprocessed: TLineSeries;
+    ChartFFTPreprocessed: TChart;
+    SeriesFFTPreprocessed: TLineSeries;
+    TabSheetPeakDetection: TTabSheet;
+    PageControlPeaks: TPageControl;
+    TabSheetCardiacPeaks: TTabSheet;
+    TabSheetRespPeaks: TTabSheet;
+    ChartPeaks: TChart;
+    SeriesFilteredForPeaks: TLineSeries;
+    SeriesDetectedPeaks: TPointSeries;
+    SeriesDetectedMinima: TPointSeries;
+    SeriesZeroLine: TLineSeries;
+    SeriesZeroCrossPoints: TPointSeries;
+    ChartRespPeaks: TChart;
+    SeriesRespSignal: TLineSeries;
+    SeriesRespDetectedPeaks: TPointSeries;
+    SeriesRespDetectedMinima: TPointSeries;
+    SeriesRespZeroLine: TLineSeries;
+    SeriesRespZeroCrossPoints: TPointSeries;
+    TabSheetHRVTime: TTabSheet;
+    SplitterHRVTime: TSplitter;
+    ChartTachogram: TChart;
+    SeriesTachogram: TLineSeries;
+    ChartRRHistogram: TChart;
+    SeriesRRHistogram: TBarSeries;
+    SeriesTINN: TLineSeries;
+    SeriesMeanLine: TLineSeries;
+    TabSheetHRVFreq: TTabSheet;
+    SplitterHRVFreq: TSplitter;
+    ChartHRVPSD: TChart;
+    SeriesHRVPSD: TLineSeries;
+    ChartVasoPSD: TChart;
+    SeriesVasoPSD: TLineSeries;
+    TabSheetHRVNonLinear: TTabSheet;
+    ChartPoincare: TChart;
+    SeriesPoincare: TPointSeries;
+    TabSheetAutonomicBalance: TTabSheet;
+    ChartAutonomicBalance: TChart;
+    SeriesAutonomicBalance: TPointSeries;
+    TabSheetDWTCoeffs: TTabSheet;
+    PageControlDWTCoeffs: TPageControl;
+    TabSheetQ1: TTabSheet;
+    SplitterQ1_H1: TSplitter;
+    PanelQ1_1: TPanel;
+    SplitterQ1_V1: TSplitter;
+    ChartQ1Signal: TChart;
+    ChartQ1FFT: TChart;
+    PanelQ1_2: TPanel;
+    SplitterQ1_V2: TSplitter;
+    ChartQ1PSD: TChart;
+    ChartQ1FilterResponse: TChart;
+    TabSheetQ2: TTabSheet;
+    SplitterQ2_H1: TSplitter;
+    PanelQ2_1: TPanel;
+    SplitterQ2_V1: TSplitter;
+    ChartQ2Signal: TChart;
+    ChartQ2FFT: TChart;
+    PanelQ2_2: TPanel;
+    SplitterQ2_V2: TSplitter;
+    ChartQ2PSD: TChart;
+    ChartQ2FilterResponse: TChart;
+    TabSheetQ3: TTabSheet;
+    TabSheetQ4: TTabSheet;
+    TabSheetQ5: TTabSheet;
+    TabSheetQ6: TTabSheet;
+    TabSheetQ7: TTabSheet;
+    TabSheetQ8: TTabSheet;
+    TabSheetDWTGlobalResponse: TTabSheet;
+    SplitterDWTGlobal: TSplitter;
+    ChartDWTResponseOrigFS: TChart;
+    SeriesQ1Orig: TLineSeries;
+    SeriesQ2Orig: TLineSeries;
+    SeriesQ3Orig: TLineSeries;
+    SeriesQ4Orig: TLineSeries;
+    SeriesQ5Orig: TLineSeries;
+    SeriesQ6Orig: TLineSeries;
+    SeriesQ7Orig: TLineSeries;
+    SeriesQ8Orig: TLineSeries;
+    ChartDWTResponseDownsampledFS: TChart;
+    SeriesQ1DS: TLineSeries;
+    SeriesQ2DS: TLineSeries;
+    SeriesQ3DS: TLineSeries;
+    SeriesQ4DS: TLineSeries;
+    SeriesQ5DS: TLineSeries;
+    SeriesQ6DS: TLineSeries;
+    SeriesQ7DS: TLineSeries;
+    SeriesQ8DS: TLineSeries;
+    TabSheetResults: TTabSheet;
+    Panel1: TPanel;
+    GroupBoxTime: TGroupBox;
+    LabelMeanHR: TLabel;
+    LabelSDNN: TLabel;
+    LabelRMSSD: TLabel;
+    LabelpNN50: TLabel;
+    LabelSDANN: TLabel;
+    LabelSDNNIdx: TLabel;
+    LabelSDSD: TLabel;
+    LabelNN50: TLabel;
+    LabelHTI: TLabel;
+    LabelTINN: TLabel;
+    LabelCVNN: TLabel;
+    LabelCVSD: TLabel;
+    LabelSkew: TLabel;
+    edtMeanHR: TEdit;
+    edtSDNN: TEdit;
+    edtRMSSD: TEdit;
+    edtpNN50: TEdit;
+    edtSDANN: TEdit;
+    edtSDNNIndex: TEdit;
+    edtSDSD: TEdit;
+    edtNN50: TEdit;
+    edtHTI: TEdit;
+    edtTINN: TEdit;
+    edtCVNN: TEdit;
+    edtCVSD: TEdit;
+    edtSkewness: TEdit;
+    GroupBoxFreq: TGroupBox;
+    LabelTotalPower: TLabel;
+    LabelLFPower: TLabel;
+    LabelHFPower: TLabel;
+    LabelLFHF: TLabel;
+    LabelLFNu: TLabel;
+    LabelHFNu: TLabel;
+    LabelPeakLF: TLabel;
+    LabelPeakHF: TLabel;
+    edtTotalPower: TEdit;
+    edtLFPower: TEdit;
+    edtHFPower: TEdit;
+    edtLFHF: TEdit;
+    edtLFNu: TEdit;
+    edtHFNu: TEdit;
+    edtPeakLF: TEdit;
+    edtPeakHF: TEdit;
+    GroupBoxNonlinear: TGroupBox;
+    LabelSD1: TLabel;
+    LabelSD2: TLabel;
+    LabelSD1SD2: TLabel;
+    edtSD1: TEdit;
+    edtSD2: TEdit;
+    edtSD1SD2: TEdit;
+    PanelQ3_1: TPanel;
+    SplitterQ3_V1: TSplitter;
+    ChartQ3Signal: TChart;
+    ChartQ3FFT: TChart;
+    SplitterQ3_H1: TSplitter;
+    PanelQ3_2: TPanel;
+    SplitterQ3_V2: TSplitter;
+    ChartQ3PSD: TChart;
+    ChartQ3FilterResponse: TChart;
+    PanelQ4_1: TPanel;
+    SplitterQ4_V1: TSplitter;
+    ChartQ4Signal: TChart;
+    ChartQ4FFT: TChart;
+    SplitterQ4_H1: TSplitter;
+    PanelQ4_2: TPanel;
+    SplitterQ4_V2: TSplitter;
+    ChartQ4PSD: TChart;
+    ChartQ4FilterResponse: TChart;
+    PanelQ5_1: TPanel;
+    SplitterQ5_V1: TSplitter;
+    ChartQ5Signal: TChart;
+    ChartQ5FFT: TChart;
+    SplitterQ5_H1: TSplitter;
+    PanelQ5_2: TPanel;
+    SplitterQ5_V2: TSplitter;
+    ChartQ5PSD: TChart;
+    ChartQ5FilterResponse: TChart;
+    PanelQ6_1: TPanel;
+    SplitterQ6_V1: TSplitter;
+    ChartQ6Signal: TChart;
+    ChartQ6FFT: TChart;
+    SplitterQ6_H1: TSplitter;
+    PanelQ6_2: TPanel;
+    SplitterQ6_V2: TSplitter;
+    ChartQ6PSD: TChart;
+    ChartQ6FilterResponse: TChart;
+    PanelQ7_1: TPanel;
+    SplitterQ7_V1: TSplitter;
+    ChartQ7Signal: TChart;
+    ChartQ7FFT: TChart;
+    SplitterQ7_H1: TSplitter;
+    PanelQ7_2: TPanel;
+    SplitterQ7_V2: TSplitter;
+    ChartQ7PSD: TChart;
+    ChartQ7FilterResponse: TChart;
+    PanelQ8_1: TPanel;
+    SplitterQ8_V1: TSplitter;
+    ChartQ8Signal: TChart;
+    ChartQ8FFT: TChart;
+    SplitterQ8_H1: TSplitter;
+    PanelQ8_2: TPanel;
+    SplitterQ8_V2: TSplitter;
+    ChartQ8PSD: TChart;
+    ChartQ8FilterResponse: TChart;
+    BitBtn1: TBitBtn;
+    procedure btnLoadDataClick(Sender: TObject);
+    procedure btnProcessClick(Sender: TObject);
+    procedure FormCreate(Sender: TObject);
+  private
+    { Private declarations }
+    FSignalRaw, FSignalDownsampled, FTimeRaw, FTimeDownsampled: TSignalArray;
+    FPreprocessedSignal: TSignalArray;
+    FDWTCoefficients: TDictionary<Integer, TSignalArray>;
+    FOriginalFs, FDownsampledFs: Double;
+    FAnalyzer: TPPGAnalyzer;
+
+    // --- Local Signal Processing Methods ---
+    procedure LocalRemoveDCOffset(var Signal: TSignalArray);
+    procedure ApplyCustomBPF(var Signal: TSignalArray; Fs, LowCutoff, HighCutoff: Double);
+    procedure LocalDownsample(const InSignal, InTime: TSignalArray; Factor: Integer; out OutSignal, OutTime: TSignalArray);
+    // --------------------------------------------------------------
+
+    procedure Log(const Message: string);
+    procedure ClearAllData;
+    procedure ClearAllCharts;
+    procedure ClearAllResults;
+    procedure SetupUI;
+    function LoadCSVData(const FileName, ColumnName: string): Boolean;
+    procedure PlotSignal(Series: TChartSeries; const Time, Signal: TSignalArray; AutoScale: Boolean = True);
+    procedure PlotFrequencySpectrum(Series: TChartSeries; const Freqs, Psd: TSignalArray; AutoScale: Boolean = True);
+    function GetSignalFromSource(const SourceName: string): TSignalArray;
+    procedure UpdateResultsDisplay(const TimeFeats: TTimeDomainFeatures; const FreqFeats: TFrequencyDomainFeatures; const NonLinFeats: TNonLinearFeatures);
+    procedure UpdateAdvancedPlots(const TimeFeats: TTimeDomainFeatures; const FreqFeats: TFrequencyDomainFeatures; const NonLinFeats: TNonLinearFeatures);
+    procedure UpdateDWTPlots;
+    procedure PerformFullAnalysis;
+    procedure SetupChartAxes;
+  public
+    { Public declarations }
+  end;
+
+var
+  Form1: TForm1;
+
+implementation
+
+{$R *.dfm}
+
+const
+  SOURCE_PREPROCESSED = 'Pre-processed Signal';
+
+procedure TForm1.FormCreate(Sender: TObject);
+begin
+  FAnalyzer := TPPGAnalyzer.Create;
+  FDWTCoefficients := nil;
+  SetupUI;
+  Log('Analyzer ready. Please load a PPG data file.');
+end;
+
+procedure TForm1.btnLoadDataClick(Sender: TObject);
+begin
+  if OpenDialogPPG.Execute then
+  begin
+    ClearAllData;
+    Log('Loading file: ' + ExtractFileName(OpenDialogPPG.FileName));
+    if LoadCSVData(OpenDialogPPG.FileName, edtColumnName.Text) then
+    begin
+      PageControlMain.ActivePage := TabSheetSignalProcessing;
+      PlotSignal(SeriesRaw, FTimeRaw, FSignalRaw);
+      Log(Format('Data loaded successfully. %d samples at %.2f Hz.', [Length(FSignalRaw), FOriginalFs]));
+      btnProcess.Enabled := True;
+    end
+    else
+    begin
+      Log('ERROR: Failed to load data from CSV.');
+      btnProcess.Enabled := False;
+    end;
+  end;
+end;
+
+procedure TForm1.btnProcessClick(Sender: TObject);
+begin
+  if Length(FSignalRaw) < 100 then
+  begin
+    Log('ERROR: Not enough data to process. Please load a valid file.');
+    Exit;
+  end;
+  btnLoadData.Enabled := False;
+  btnProcess.Enabled := False;
+  Self.Cursor := crHourGlass;
+  try
+    PerformFullAnalysis;
+  finally
+    btnLoadData.Enabled := True;
+    btnProcess.Enabled := True;
+    Self.Cursor := crDefault;
+  end;
+end;
+
+// =============================================================================
+// LOCAL SIGNAL PROCESSING
+// =============================================================================
+
+procedure TForm1.LocalRemoveDCOffset(var Signal: TSignalArray);
+var
+  i: Integer;
+  MeanVal: Double;
+begin
+  if Length(Signal) = 0 then Exit;
+  MeanVal := 0;
+  for i := 0 to High(Signal) do
+    MeanVal := MeanVal + Signal[i];
+  MeanVal := MeanVal / Length(Signal);
+
+  for i := 0 to High(Signal) do
+    Signal[i] := Signal[i] - MeanVal;
+end;
+
+procedure TForm1.ApplyCustomBPF(var Signal: TSignalArray; Fs, LowCutoff, HighCutoff: Double);
+var
+  N, i: Integer;
+  Tm, WcLPF, WcHPF, denom: Double;
+  // LPF Coefficients (Order 2)
+  LPFa0, LPFa1, LPFa2, LPFb1, LPFb2: Double;
+  // HPF Coefficients (Order 1)
+  HPFa0, HPFa1, HPFb1: Double;
+  SignalLPF, TempResult: TSignalArray;
+begin
+  N := Length(Signal);
+  if N < 3 then Exit;
+
+  // 1. Hitung Koefisien
+  Tm := 1.0 / Fs;
+  WcLPF := 2 * Pi * HighCutoff; // Batas Atas (Low Pass)
+  WcHPF := 2 * Pi * LowCutoff;  // Batas Bawah (High Pass)
+
+  // Koefisien LPF Orde 2
+  denom := (4 / (Tm * Tm)) + (2 * Sqrt(2) * WcLPF / Tm) + Sqr(WcLPF);
+  if denom = 0 then Exit;
+
+  LPFb1 := ((8 / (Tm * Tm)) - 2 * Sqr(WcLPF)) / denom;
+  LPFb2 := ((4 / (Tm * Tm)) - (2 * Sqrt(2) * WcLPF / Tm) + Sqr(WcLPF)) / denom;
+  LPFa0 := Sqr(WcLPF) / denom;
+  LPFa1 := 2 * Sqr(WcLPF) / denom;
+  LPFa2 := LPFa0;
+
+  // Koefisien HPF Orde 1
+  denom := WcHPF + (2 / Tm);
+  if denom = 0 then Exit;
+
+  HPFa0 := (2 / Tm) / denom;
+  HPFa1 := -HPFa0;
+  HPFb1 := (WcHPF - (2 / Tm)) / denom;
+
+  // 2. Eksekusi LPF
+  SetLength(SignalLPF, N);
+  SignalLPF[0] := Signal[0];
+  if N > 1 then SignalLPF[1] := Signal[1];
+
+  for i := 2 to N - 1 do
+  begin
+    SignalLPF[i] := (LPFb1 * SignalLPF[i-1]) - (LPFb2 * SignalLPF[i-2]) +
+                    (LPFa0 * Signal[i]) + (LPFa1 * Signal[i-1]) + (LPFa2 * Signal[i-2]);
+  end;
+
+  // 3. Eksekusi HPF (Input dari LPF)
+  SetLength(TempResult, N);
+  TempResult[0] := 0;
+
+  for i := 1 to N - 1 do
+  begin
+    TempResult[i] := (HPFa0 * (SignalLPF[i] - SignalLPF[i-1])) - (HPFb1 * TempResult[i-1]);
+  end;
+
+  // Salin kembali ke variabel Signal utama
+  for i := 0 to N - 1 do Signal[i] := TempResult[i];
+end;
+
+procedure TForm1.LocalDownsample(const InSignal, InTime: TSignalArray; Factor: Integer; out OutSignal, OutTime: TSignalArray);
+var
+  i, OutLen, Idx: Integer;
+begin
+  if Factor <= 1 then
+  begin
+    OutSignal := Copy(InSignal);
+    OutTime := Copy(InTime);
+    Exit;
+  end;
+
+  OutLen := Length(InSignal) div Factor;
+  SetLength(OutSignal, OutLen);
+  SetLength(OutTime, OutLen);
+
+  for i := 0 to OutLen - 1 do
+  begin
+    Idx := i * Factor;
+    if Idx < Length(InSignal) then
+    begin
+      OutSignal[i] := InSignal[Idx];
+      OutTime[i] := InTime[Idx];
+    end;
+  end;
+end;
+
+// =============================================================================
+// Core Analysis Workflow
+// =============================================================================
+
+procedure TForm1.PerformFullAnalysis;
+var
+  // Variabel Umum & Signal
+  DownsampleFactor: Integer;
+  hrvInputSignal, rrInputSignal, vmaInputSignal: TSignalArray;
+  fft_freqs, fft_mags, vaso_freqs, vaso_psd: TSignalArray;
+  ProcessingSignal: TSignalArray;
+  NyquistRaw, NyquistDS: Double;
+
+  // Variabel Zero Crossing - Cardiac
+  CardiacMaxIdx, CardiacMinIdx, CardiacZeroIdx: TArray<Integer>;
+  ZeroValCardiac: Double;
+  RRIntervals, PeakTimes: TSignalArray; // Untuk kalkulasi HRV lanjutan
+  Peaks: TArray<Integer>;
+
+  // Variabel Zero Crossing - Respiratory
+  RespMaxIdx, RespMinIdx, RespZeroIdx: TArray<Integer>;
+  ZeroValResp: Double;
+
+  // Variabel Hasil Fitur
+  HRV_Time: TTimeDomainFeatures;
+  HRV_Freq: TFrequencyDomainFeatures;
+  HRV_NonLin: TNonLinearFeatures;
+  RespRate, VasoRate: Double;
+
+  i: Integer;
+begin
+  Log('================== ANALYSIS STARTED ==================');
+  ClearAllCharts;
+  ClearAllResults;
+
+  // ==========================================================
+  // STEP 1: PRE-PROCESSING (Filter 0.01 - 8.0 Hz)
+  // ==========================================================
+  ProcessingSignal := Copy(FSignalRaw);
+  Log('Step 1: Advanced Preprocessing...');
+
+  LocalRemoveDCOffset(ProcessingSignal);
+  ApplyCustomBPF(ProcessingSignal, FOriginalFs, 0.01, 8.0);
+
+  FPreprocessedSignal := Copy(ProcessingSignal);
+  PlotSignal(SeriesPreprocessed, FTimeRaw, FPreprocessedSignal);
+  Log('Signal filtering complete (Bandpass 0.01-8.0 Hz).');
+
+  // ==========================================================
+  // STEP 2: DOWNSAMPLING
+  // ==========================================================
+  Log('Step 2: Downsampling signal...');
+  DownsampleFactor := SpinEditDownsample.Value;
+  if DownsampleFactor > 0 then
+    FDownsampledFs := FOriginalFs / DownsampleFactor
+  else
+    FDownsampledFs := FOriginalFs;
+
+  LocalDownsample(FPreprocessedSignal, FTimeRaw, DownsampleFactor, FSignalDownsampled, FTimeDownsampled);
+
+  PageControlMain.ActivePage := TabSheetSignalProcessing;
+  PlotSignal(SeriesRaw, FTimeRaw, FSignalRaw);
+  PlotSignal(SeriesDownsampled, FTimeDownsampled, FSignalDownsampled);
+
+  Log(Format('Signal downsampled to %.2f Hz.', [FDownsampledFs]));
+  Application.ProcessMessages;
+
+  // ==========================================================
+  // STEP 2.5: FFT PLOTTING (0 to Nyquist)
+  // ==========================================================
+  Log('Step 2.5: Calculating FFTs...');
+  NyquistRaw := FOriginalFs / 2.0;
+  NyquistDS := FDownsampledFs / 2.0;
+
+  FAnalyzer.FFTMagnitudeAndFrequencies(FSignalRaw, FOriginalFs, fft_freqs, fft_mags);
+  PlotFrequencySpectrum(SeriesFFTRaw, fft_freqs, fft_mags);
+  ChartFFTRaw.BottomAxis.Automatic := False;
+  ChartFFTRaw.BottomAxis.SetMinMax(0, NyquistRaw);
+
+  FAnalyzer.FFTMagnitudeAndFrequencies(FSignalDownsampled, FDownsampledFs, fft_freqs, fft_mags);
+  PlotFrequencySpectrum(SeriesFFTDownsampled, fft_freqs, fft_mags);
+  ChartFFTDownsampled.BottomAxis.Automatic := False;
+  ChartFFTDownsampled.BottomAxis.SetMinMax(0, NyquistDS);
+
+  FAnalyzer.FFTMagnitudeAndFrequencies(FPreprocessedSignal, FOriginalFs, fft_freqs, fft_mags);
+  PlotFrequencySpectrum(SeriesFFTPreprocessed, fft_freqs, fft_mags);
+  ChartFFTPreprocessed.BottomAxis.Automatic := False;
+  ChartFFTPreprocessed.BottomAxis.SetMinMax(0, NyquistRaw);
+
+  Application.ProcessMessages;
+
+  // ==========================================================
+  // STEP 3: DWT DECOMPOSITION
+  // ==========================================================
+  Log('Step 3: Performing DWT decomposition...');
+  PageControlMain.ActivePage := TabSheetDWTCoeffs;
+  if Assigned(FDWTCoefficients) then FDWTCoefficients.Free;
+  FDWTCoefficients := FAnalyzer.Decompose_DWT(FSignalDownsampled);
+
+  // ==========================================================
+  // STEP 4: SOURCE SELECTION
+  // ==========================================================
+  if cbHRVSource.Text = SOURCE_PREPROCESSED then hrvInputSignal := FSignalDownsampled else hrvInputSignal := GetSignalFromSource(cbHRVSource.Text);
+  if cbRRSource.Text = SOURCE_PREPROCESSED then rrInputSignal := FSignalDownsampled else rrInputSignal := GetSignalFromSource(cbRRSource.Text);
+  if cbVMASource.Text = SOURCE_PREPROCESSED then vmaInputSignal := FSignalDownsampled else vmaInputSignal := GetSignalFromSource(cbVMASource.Text);
+  LocalRemoveDCOffset(hrvInputSignal);
+  LocalRemoveDCOffset(rrInputSignal);
+  LocalRemoveDCOffset(vmaInputSignal);
+
+  // ==========================================================
+  // STEP 5: RATES & RESPIRATORY ANALYSIS (ZERO CROSSING)
+  // ==========================================================
+
+  // --- A. RESPIRATORY ---
+  if (Length(rrInputSignal) > 0) then
+  begin
+    Log('Analyzing Respiratory Signal (Zero Crossing)...');
+
+    // 1. Hitung Rate (ExtractRateFromSignal return HERTZ)
+    // KITA KALI 60 UNTUK JADI BRPM
+    RespRate := FAnalyzer.ExtractRateFromSignal(rrInputSignal, FDownsampledFs, 0.15, 0.4) * 60.0;
+    edtRespRate.Text := Format('%.2f', [RespRate]);
+
+    // 2. Analisis Bentuk Gelombang
+    FAnalyzer.AnalyzeSignalZeroCrossing(rrInputSignal, FTimeDownsampled,
+      RespMaxIdx, RespMinIdx, RespZeroIdx, ZeroValResp);
+
+    // 3. Visualisasi
+    PlotSignal(SeriesRespSignal, FTimeDownsampled, rrInputSignal);
+
+    if Assigned(SeriesRespZeroLine) then
+    begin
+      SeriesRespZeroLine.Clear;
+      SeriesRespZeroLine.AddXY(FTimeDownsampled[0], ZeroValResp);
+      SeriesRespZeroLine.AddXY(FTimeDownsampled[High(FTimeDownsampled)], ZeroValResp);
+    end;
+
+    SeriesRespDetectedPeaks.Clear;
+    SeriesRespDetectedPeaks.SeriesColor := clRed;
+    for i in RespMaxIdx do
+      SeriesRespDetectedPeaks.AddXY(FTimeDownsampled[i], rrInputSignal[i]);
+
+    if Assigned(SeriesRespDetectedMinima) then
+    begin
+      SeriesRespDetectedMinima.Clear;
+      SeriesRespDetectedMinima.SeriesColor := clBlue;
+      for i in RespMinIdx do
+        SeriesRespDetectedMinima.AddXY(FTimeDownsampled[i], rrInputSignal[i]);
+    end;
+
+    if Assigned(SeriesRespZeroCrossPoints) then
+    begin
+      SeriesRespZeroCrossPoints.Clear;
+      SeriesRespZeroCrossPoints.SeriesColor := clGreen;
+      for i in RespZeroIdx do
+        SeriesRespZeroCrossPoints.AddXY(FTimeDownsampled[i], ZeroValResp);
+    end;
+  end;
+
+  // --- B. VASOMOTOR (MODIFIKASI HERTZ) ---
+  if (Length(vmaInputSignal) > 0) then
+  begin
+    // 1. Hitung Rate dalam HERTZ (Rentang 0.04 - 0.15 Hz)
+    VasoRate := FAnalyzer.ExtractRateFromSignal(vmaInputSignal, FDownsampledFs, 0.04, 0.15);
+    edtVasoRate.Text := Format('%.4f Hz', [VasoRate]);
+
+    // 2. Plot PSD
+    FAnalyzer.Welch(vmaInputSignal, FDownsampledFs, vaso_freqs, vaso_psd);
+    PlotFrequencySpectrum(SeriesVasoPSD, vaso_freqs, vaso_psd);
+  end;
+
+  // ==========================================================
+  // STEP 6: CARDIAC AND RESPIRATORY ANALYSIS (ZERO CROSSING)
+  // ==========================================================
+  Log('Step 6: Performing Cardiac And Respiratory Zero-Crossing Analysis...');
+  if Length(hrvInputSignal) > 10 then
+  begin
+    // 1. Analisis Bentuk Gelombang (Maxima, Minima, Zero)
+    FAnalyzer.AnalyzeSignalZeroCrossing(hrvInputSignal, FTimeDownsampled,
+      CardiacMaxIdx, CardiacMinIdx, CardiacZeroIdx, ZeroValCardiac);
+
+    // 2. Visualisasi (Tab Cardiac Peaks)
+    PlotSignal(SeriesFilteredForPeaks, FTimeDownsampled, hrvInputSignal);
+
+    // Plot Garis Zero
+    if Assigned(SeriesZeroLine) then
+    begin
+      SeriesZeroLine.Clear;
+      SeriesZeroLine.AddXY(FTimeDownsampled[0], ZeroValCardiac);
+      SeriesZeroLine.AddXY(FTimeDownsampled[High(FTimeDownsampled)], ZeroValCardiac);
+    end;
+
+    // Plot Maxima (Sistolik)
+    SeriesDetectedPeaks.Clear;
+    SeriesDetectedPeaks.SeriesColor := clRed;
+    for i in CardiacMaxIdx do
+      SeriesDetectedPeaks.AddXY(FTimeDownsampled[i], hrvInputSignal[i]);
+
+    // Plot Minima (Diastolik) - PENTING: Pastikan SeriesDetectedMinima ada di DFM
+    if Assigned(SeriesDetectedMinima) then
+    begin
+      SeriesDetectedMinima.Clear;
+      SeriesDetectedMinima.SeriesColor := clBlue;
+      for i in CardiacMinIdx do
+        SeriesDetectedMinima.AddXY(FTimeDownsampled[i], hrvInputSignal[i]);
+    end;
+
+    // Plot Zero Crossings - PENTING: Pastikan SeriesZeroCrossPoints ada di DFM
+    if Assigned(SeriesZeroCrossPoints) then
+    begin
+      SeriesZeroCrossPoints.Clear;
+      SeriesZeroCrossPoints.SeriesColor := clGreen;
+      for i in CardiacZeroIdx do
+        SeriesZeroCrossPoints.AddXY(FTimeDownsampled[i], ZeroValCardiac);
+    end;
+
+    // 3. Kalkulasi HRV (Butuh Konversi Indeks Maxima ke RR Interval Time)
+    if Length(CardiacMaxIdx) > 1 then
+    begin
+      // Konversi Array Indeks ke Array Time & Interval
+      SetLength(RRIntervals, Length(CardiacMaxIdx) - 1);
+      SetLength(PeakTimes, Length(CardiacMaxIdx) - 1);
+
+      for i := 0 to High(RRIntervals) do
+      begin
+        PeakTimes[i] := FTimeDownsampled[CardiacMaxIdx[i]];
+        // Interval = Waktu Puncak Berikutnya - Waktu Puncak Sekarang
+        RRIntervals[i] := FTimeDownsampled[CardiacMaxIdx[i+1]] - FTimeDownsampled[CardiacMaxIdx[i]];
+      end;
+
+      // Kalkulasi Fitur HRV (Logic Lama Tetap Digunakan)
+      HRV_Time := FAnalyzer.CalculateTimeDomain(RRIntervals, PeakTimes);
+      HRV_Freq := FAnalyzer.CalculateFrequencyDomain(RRIntervals, PeakTimes);
+      HRV_NonLin := FAnalyzer.CalculateNonLinear(RRIntervals);
+
+      // Tampilkan Hasil
+      PageControlMain.ActivePage := TabSheetResults;
+      UpdateResultsDisplay(HRV_Time, HRV_Freq, HRV_NonLin);
+      UpdateAdvancedPlots(HRV_Time, HRV_Freq, HRV_NonLin);
+    end;
+  end;
+
+  UpdateDWTPlots;
+  Log('================== ANALYSIS FINISHED ==================');
+end;
+
+// =============================================================================
+// UI and Helper Functions
+// =============================================================================
+
+procedure TForm1.UpdateAdvancedPlots(const TimeFeats: TTimeDomainFeatures;
+  const FreqFeats: TFrequencyDomainFeatures; const NonLinFeats: TNonLinearFeatures);
+var
+  i: Integer;
+  bin_width, meanRR: Double;
+  skewInfo: string;
+  SeriesVLF, SeriesLF, SeriesHF: TAreaSeries;
+  f, val: Double;
+  TotalPow_Disp, VLF_Pow, LF_Pow, HF_Pow: Double;
+  Pct_VLF, Pct_LF, Pct_HF: Double;
+  freqStep: Double;
+  meanRR_ms, centerX, centerY: Double;
+  SeriesSD1Line, SeriesSD2Line, SeriesEllipse: TLineSeries;
+  SeriesIdentity: TLineSeries;
+  t, angle, rad, x_ell, y_ell: Double;
+  a, b, phi: Double; // a=SD2, b=SD1
+begin
+  // 1. Plot Tachogram (RR vs Time)
+  SeriesTachogram.Clear;
+  // Gunakan PeakTimes untuk sumbu X agar sesuai waktu kejadian
+  // (Asumsi RRIntervals[i] adalah interval SETELAH PeakTimes[i])
+  // Namun TimeFeats tidak menyimpan PeakTimes raw, jadi kita plot sequential saja atau ubah logic jika perlu.
+  // Untuk visualisasi simpel:
+  for i := 0 to High(NonLinFeats.PoincareX) do // PoincareX sebenarnya adalah RR[n] dalam ms
+     SeriesTachogram.AddXY(i, NonLinFeats.PoincareX[i]);
+
+  // 2. Plot Histogram, TINN, dan Skewness
+  SeriesRRHistogram.Clear;
+  SeriesTINN.Clear;
+  SeriesMeanLine.Clear;
+
+  if Length(TimeFeats.RRHistogramCounts) > 0 then
+  begin
+    // A. Plot Bar Histogram
+    if Length(TimeFeats.RRHistogramBins) > 1 then
+       bin_width := TimeFeats.RRHistogramBins[1] - TimeFeats.RRHistogramBins[0]
+    else
+       bin_width := 1;
+
+    for i := 0 to High(TimeFeats.RRHistogramCounts) do
+      if i < Length(TimeFeats.RRHistogramBins) then
+        SeriesRRHistogram.AddXY(TimeFeats.RRHistogramBins[i], TimeFeats.RRHistogramCounts[i]);
+
+    // B. Plot Segitiga TINN (Overlay)
+    // Segitiga dibentuk oleh 3 titik: (N, 0) -> (Mode, Height) -> (M, 0)
+    // Kita gambar garis dari N ke Mode ke M.
+    if TimeFeats.TINN > 0 then
+    begin
+      SeriesTINN.AddXY(TimeFeats.TINN_N, 0);                 // Titik Kiri Bawah
+      SeriesTINN.AddXY(TimeFeats.TINN_Mode, TimeFeats.TINN_Height); // Puncak
+      SeriesTINN.AddXY(TimeFeats.TINN_M, 0);                 // Titik Kanan Bawah
+    end;
+
+    // C. Plot Garis Mean (Indikator Skewness)
+    // Jika MeanHR = 60000/MeanRR, maka MeanRR = 60000/MeanHR
+    if TimeFeats.MeanHR > 0 then
+    begin
+      meanRR := 60000 / TimeFeats.MeanHR;
+      // Gambar garis vertikal setinggi histogram tertinggi
+      SeriesMeanLine.AddXY(meanRR, 0);
+      SeriesMeanLine.AddXY(meanRR, TimeFeats.TINN_Height * 1.05); // Sedikit lebih tinggi dari puncak
+    end;
+
+    // D. Update Judul Chart dengan Info Skewness
+    if TimeFeats.Skewness > 0.1 then skewInfo := 'Positive Skew (Right Tail)'
+    else if TimeFeats.Skewness < -0.1 then skewInfo := 'Negative Skew (Left Tail)'
+    else skewInfo := 'Symmetric Distribution';
+
+    ChartRRHistogram.Title.Text.Text := Format('RR Histogram | TINN Triangle | Skewness: %.3f (%s)',
+      [TimeFeats.Skewness, skewInfo]);
+
+    // Opsional: Atur Pen Style
+    SeriesTINN.LinePen.Style := psDash;
+    SeriesTINN.LinePen.Width := 2;
+  end;
+
+  // 3. Plot HRV PSD (Grafik Kiri) - Area Filled
+  ChartHRVPSD.SeriesList.Clear; // Hapus series lama
+  ChartHRVPSD.Title.Text.Text := 'HRV Welch Periodogram (ms^2/Hz)';
+  ChartHRVPSD.View3D := False;
+  ChartHRVPSD.Legend.Visible := True;
+  ChartHRVPSD.Legend.Alignment := laTop; // Legend di atas atau kanan
+  ChartHRVPSD.Axes.Left.Title.Caption := 'PSD (ms^2/Hz)';
+  ChartHRVPSD.Axes.Bottom.Title.Caption := 'Frequency (Hz)';
+
+  // Buat 3 Series Area Secara Manual (Runtime)
+  SeriesVLF := TAreaSeries.Create(ChartHRVPSD);
+  SeriesLF  := TAreaSeries.Create(ChartHRVPSD);
+  SeriesHF  := TAreaSeries.Create(ChartHRVPSD);
+
+  // Setup Style VLF (Abu-abu / Gelap)
+  SeriesVLF.ParentChart := ChartHRVPSD;
+  SeriesVLF.Title := 'VLF';
+  SeriesVLF.SeriesColor := clSilver; // Atau $00E0E0E0
+  SeriesVLF.AreaLinesPen.Visible := False;
+  SeriesVLF.Transparency := 30;
+  SeriesVLF.UseYOrigin := True;
+  SeriesVLF.YOrigin := 0;
+
+  // Setup Style LF (Ungu/Biru seperti referensi)
+  SeriesLF.ParentChart := ChartHRVPSD;
+  SeriesLF.Title := 'LF';
+  SeriesLF.SeriesColor := $00FF8080; // Warna keunguan (BGR format)
+  SeriesLF.AreaLinesPen.Visible := False;
+  SeriesLF.Transparency := 30;
+  SeriesLF.UseYOrigin := True;
+  SeriesLF.YOrigin := 0;
+
+  // Setup Style HF (Cyan/Biru Muda seperti referensi)
+  SeriesHF.ParentChart := ChartHRVPSD;
+  SeriesHF.Title := 'HF';
+  SeriesHF.SeriesColor := clAqua;
+  SeriesHF.AreaLinesPen.Visible := False;
+  SeriesHF.Transparency := 30;
+  SeriesHF.UseYOrigin := True;
+  SeriesHF.YOrigin := 0;
+
+  // --- ISI DATA KE SERIES BERDASARKAN FREKUENSI ---
+  // Band Definitions:
+  // VLF: 0.003 - 0.04
+  // LF:  0.04 - 0.15
+  // HF:  0.15 - 0.40
+
+  if Length(FreqFeats.PSD_Freqs) > 1 then
+  begin
+    freqStep := FreqFeats.PSD_Freqs[1] - FreqFeats.PSD_Freqs[0];
+    VLF_Pow := 0; LF_Pow := 0; HF_Pow := 0;
+
+    for i := 0 to High(FreqFeats.PSD_Freqs) do
+    begin
+      f := FreqFeats.PSD_Freqs[i];
+      val := FreqFeats.PSD_Values[i];
+
+      // Skip frekuensi negatif atau noise sangat rendah
+      if f < 0.003 then Continue;
+
+      // Distribusi ke Series
+      if (f < 0.04) then
+      begin
+        SeriesVLF.AddXY(f, val);
+        VLF_Pow := VLF_Pow + val;
+        // Titik sambung agar grafik mulus (tambahkan juga ke awal LF)
+        if (i < High(FreqFeats.PSD_Freqs)) and (FreqFeats.PSD_Freqs[i+1] >= 0.04) then
+           SeriesLF.AddXY(f, val);
+      end
+      else if (f >= 0.04) and (f < 0.15) then
+      begin
+        SeriesLF.AddXY(f, val);
+        LF_Pow := LF_Pow + val;
+        // Titik sambung ke HF
+        if (i < High(FreqFeats.PSD_Freqs)) and (FreqFeats.PSD_Freqs[i+1] >= 0.15) then
+           SeriesHF.AddXY(f, val);
+      end
+      else if (f >= 0.15) and (f <= 0.5) then // Margin diatur 0.5
+      begin
+        SeriesHF.AddXY(f, val);
+        HF_Pow := HF_Pow + val;
+      end;
+    end;
+
+    // Batasi Tampilan Axis
+    ChartHRVPSD.Axes.Bottom.SetMinMax(0, 0.4);
+    ChartHRVPSD.Axes.Left.Automatic := True;
+
+    // --- HITUNG & TAMPILKAN STATISTIK (Sesuai Gambar 1) ---
+    // Kalikan freqStep untuk mendapatkan Area (Power dalam ms^2)
+    VLF_Pow := VLF_Pow * freqStep;
+    LF_Pow  := LF_Pow * freqStep;
+    HF_Pow  := HF_Pow * freqStep;
+    TotalPow_Disp := VLF_Pow + LF_Pow + HF_Pow;
+
+    if TotalPow_Disp > 0 then
+    begin
+      Pct_VLF := (VLF_Pow / TotalPow_Disp) * 100;
+      Pct_LF  := (LF_Pow / TotalPow_Disp) * 100;
+      Pct_HF  := (HF_Pow / TotalPow_Disp) * 100;
+
+      // Update Judul Series untuk Legend
+      SeriesVLF.Title := Format('VLF (%.1f%%)', [Pct_VLF]);
+      SeriesLF.Title  := Format('LF (%.1f%%)', [Pct_LF]);
+      SeriesHF.Title  := Format('HF (%.1f%%)', [Pct_HF]);
+
+      // Tampilkan Total Power di SubTitle atau Header Chart
+      ChartHRVPSD.SubTitle.Text.Text := Format('Total Power: %.1f ms^2', [TotalPow_Disp]);
+      ChartHRVPSD.SubTitle.Visible := True;
+      ChartHRVPSD.SubTitle.Font.Color := clBlack;
+      ChartHRVPSD.SubTitle.Font.Style := [fsBold];
+    end;
+  end;
+
+  // 4. Plot Poincare
+  ChartPoincare.SeriesList.Clear;
+  ChartPoincare.View3D := False;
+  ChartPoincare.Title.Text.Text := 'Poincaré Plot (with SD1/SD2 Ellipse)';
+  ChartPoincare.Axes.Bottom.Title.Caption := 'RR[n] (ms)';
+  ChartPoincare.Axes.Left.Title.Caption := 'RR[n+1] (ms)';
+
+  // A. Plot Titik Data (Scatter)
+  SeriesPoincare := TPointSeries.Create(ChartPoincare);
+  SeriesPoincare.ParentChart := ChartPoincare;
+  SeriesPoincare.Title := 'RR Intervals';
+  SeriesPoincare.SeriesColor := clNavy;
+  SeriesPoincare.Pointer.Style := psCircle;
+  SeriesPoincare.Pointer.Size := 3;
+  SeriesPoincare.Pointer.Pen.Visible := False; // Hilangkan garis pinggir titik agar rapi
+  // Transparansi agar tumpukan titik terlihat
+  SeriesPoincare.Transparency := 30;
+
+  if Length(NonLinFeats.PoincareX) > 0 then
+    for i := 0 to High(NonLinFeats.PoincareX) do
+      SeriesPoincare.AddXY(NonLinFeats.PoincareX[i], NonLinFeats.PoincareY[i]);
+
+  // Hitung Pusat Massa (Mean RR)
+  if TimeFeats.MeanHR > 0 then
+    meanRR_ms := 60000 / TimeFeats.MeanHR
+  else
+    meanRR_ms := 0;
+
+  if (meanRR_ms > 0) and (NonLinFeats.SD1 > 0) then
+  begin
+    centerX := meanRR_ms;
+    centerY := meanRR_ms;
+
+    // B. Garis Identitas (Line of Identity x=y)
+    // Kita gambar diagonal panjang melintasi chart
+    SeriesIdentity := TLineSeries.Create(ChartPoincare);
+    SeriesIdentity.ParentChart := ChartPoincare;
+    SeriesIdentity.Title := 'Identity Line';
+    SeriesIdentity.SeriesColor := clSilver;
+    SeriesIdentity.LinePen.Style := psDash;
+    SeriesIdentity.AddXY(0, 0);
+    SeriesIdentity.AddXY(2000, 2000); // Asumsi max RR 2000ms
+
+    // C. Gambar Ellips (Fitting)
+    // Persamaan Parametrik Ellips yang diputar 45 derajat
+    // a = SD2 (Mayor), b = SD1 (Minor)
+    SeriesEllipse := TLineSeries.Create(ChartPoincare);
+    SeriesEllipse.ParentChart := ChartPoincare;
+    SeriesEllipse.Title := 'SD Ellipse';
+    SeriesEllipse.SeriesColor := clBlack;
+    SeriesEllipse.LinePen.Width := 2;
+    SeriesEllipse.LinePen.Style := psDash;
+    SeriesEllipse.XValues.Order := loNone;
+
+    a := NonLinFeats.SD2; // Radius Mayor (sepanjang garis identitas)
+    b := NonLinFeats.SD1; // Radius Minor (tegak lurus)
+    phi := Pi / 4;        // Rotasi 45 derajat (0.785 radian)
+
+    // Loop 0 sampai 2*Pi untuk menggambar lingkaran/ellips
+    t := 0;
+    while t <= 2 * Pi + 0.1 do
+    begin
+      // Rumus rotasi ellips
+      x_ell := centerX + a * Cos(t) * Cos(phi) - b * Sin(t) * Sin(phi);
+      y_ell := centerY + a * Cos(t) * Sin(phi) + b * Sin(t) * Cos(phi);
+      SeriesEllipse.AddXY(x_ell, y_ell);
+      t := t + 0.1;
+    end;
+
+    // D. Gambar Garis SD1 (Tegak Lurus - Cross hair pendek)
+    // Garis melintasi ellips pada sumbu pendek
+    SeriesSD1Line := TLineSeries.Create(ChartPoincare);
+    SeriesSD1Line.ParentChart := ChartPoincare;
+    SeriesSD1Line.Title := 'SD1 (Short Term)';
+    SeriesSD1Line.SeriesColor := clRed;
+    SeriesSD1Line.LinePen.Width := 3;
+    SeriesSD1Line.LinePen.Style := psDash;
+
+    // Titik awal dan akhir garis SD1 (di tepi ellips)
+    // t = Pi/2 dan t = 3*Pi/2 pada persamaan parametrik sebelum rotasi
+    SeriesSD1Line.AddXY(
+      centerX + a * Cos(Pi/2) * Cos(phi) - b * Sin(Pi/2) * Sin(phi),
+      centerY + a * Cos(Pi/2) * Sin(phi) + b * Sin(Pi/2) * Cos(phi)
+    );
+    SeriesSD1Line.AddXY(
+      centerX + a * Cos(3*Pi/2) * Cos(phi) - b * Sin(3*Pi/2) * Sin(phi),
+      centerY + a * Cos(3*Pi/2) * Sin(phi) + b * Sin(3*Pi/2) * Cos(phi)
+    );
+
+    // E. Gambar Garis SD2 (Sejajar - Cross hair panjang)
+    // Garis melintasi ellips pada sumbu panjang
+    SeriesSD2Line := TLineSeries.Create(ChartPoincare);
+    SeriesSD2Line.ParentChart := ChartPoincare;
+    SeriesSD2Line.Title := 'SD2 (Long Term)';
+    SeriesSD2Line.SeriesColor := clBlue;
+    SeriesSD2Line.LinePen.Width := 3;
+    SeriesSD2Line.LinePen.Style := psDash;
+
+    // t = 0 dan t = Pi
+    SeriesSD2Line.AddXY(
+      centerX + a * Cos(0) * Cos(phi) - b * Sin(0) * Sin(phi),
+      centerY + a * Cos(0) * Sin(phi) + b * Sin(0) * Cos(phi)
+    );
+    SeriesSD2Line.AddXY(
+      centerX + a * Cos(Pi) * Cos(phi) - b * Sin(Pi) * Sin(phi),
+      centerY + a * Cos(Pi) * Sin(phi) + b * Sin(Pi) * Cos(phi)
+    );
+
+    // F. Atur Zoom Axis agar fokus ke Ellips
+    // Buffer 1.5x dari SD2 agar ellips tidak mentok pinggir
+    ChartPoincare.Axes.Bottom.SetMinMax(centerX - NonLinFeats.SD2 * 1.5, centerX + NonLinFeats.SD2 * 1.5);
+    ChartPoincare.Axes.Left.SetMinMax(centerY - NonLinFeats.SD2 * 1.5, centerY + NonLinFeats.SD2 * 1.5);
+  end;
+
+  // ===========================================================================
+  // 5. AUTONOMIC BALANCE DIAGRAM (INTEGRASI KODE BARU)
+  // ===========================================================================
+
+  // A. Persiapan Data (Hitung Ln)
+  var LnLF, LnHF: Double;
+  if FreqFeats.LF_Power > 1 then LnLF := Ln(FreqFeats.LF_Power) else LnLF := 0;
+  if FreqFeats.HF_Power > 1 then LnHF := Ln(FreqFeats.HF_Power) else LnHF := 0;
+
+  // B. Bersihkan Chart
+  ChartAutonomicBalance.SeriesList.Clear;
+  ChartAutonomicBalance.View3D := False;
+  ChartAutonomicBalance.Legend.Visible := False;
+
+  // Judul Chart
+  ChartAutonomicBalance.Title.Text.Text := 'Autonomic Balance (Ln LF vs Ln HF)';
+  ChartAutonomicBalance.Title.Font.Style := [fsBold];
+
+  // C. Konfigurasi Sumbu (2.0 s/d 9.0)
+  with ChartAutonomicBalance.Axes.Bottom do
+  begin
+    Automatic := False;
+    SetMinMax(2.0, 9.0);
+    Increment := 1.0;
+    Grid.Visible := False;
+    LabelStyle := talValue; // Pastikan angka yang muncul
+    Title.Caption := 'Sympathetic (Ln LF Power)';
+    Title.Font.Style := [fsBold];
+  end;
+
+  with ChartAutonomicBalance.Axes.Left do
+  begin
+    Automatic := False;
+    SetMinMax(2.0, 9.0);
+    Increment := 1.0;
+    Grid.Visible := False;
+    LabelStyle := talValue;
+    Title.Caption := 'Parasympathetic (Ln HF Power)';
+    Title.Font.Style := [fsBold];
+  end;
+
+  // Koordinat Tengah 9 Kotak (Sesuai kode referensi Anda)
+  var cx1 := 3.25; var cx2 := 5.50; var cx3 := 7.75;
+  var cy1 := 3.25; var cy2 := 5.50; var cy3 := 7.75;
+
+  // D. Series Background (9 Zona Warna)
+  var SeriesBackground := TPointSeries.Create(ChartAutonomicBalance);
+  SeriesBackground.ParentChart := ChartAutonomicBalance;
+  SeriesBackground.Title := 'Zones';
+  SeriesBackground.Pointer.Style := psRectangle;
+  SeriesBackground.Pointer.HorizSize := 2000; // Ukuran besar untuk blok warna
+  SeriesBackground.Pointer.VertSize := 2000;
+  SeriesBackground.Pointer.Pen.Visible := False;
+  SeriesBackground.Marks.Visible := False;
+  SeriesBackground.Active := True;
+
+  // Baris Bawah (Zona 1-3)
+  SeriesBackground.AddXY(cx1, cy1, '', $008080FF); // Zona 1 (Merah Muda)
+  SeriesBackground.AddXY(cx2, cy1, '', $0080C0FF); // Zona 2 (Oranye)
+  SeriesBackground.AddXY(cx3, cy1, '', $008080FF); // Zona 3 (Merah Muda)
+  // Baris Tengah (Zona 4-6)
+  SeriesBackground.AddXY(cx1, cy2, '', $0080FFFF); // Zona 4 (Kuning)
+  SeriesBackground.AddXY(cx2, cy2, '', $0080FF80); // Zona 5 (Hijau)
+  SeriesBackground.AddXY(cx3, cy2, '', $0080FFFF); // Zona 6 (Kuning)
+  // Baris Atas (Zona 7-9)
+  SeriesBackground.AddXY(cx1, cy3, '', $0080FFFF); // Zona 7 (Kuning)
+  SeriesBackground.AddXY(cx2, cy3, '', $00CCFFCC); // Zona 8 (Hijau Muda)
+  SeriesBackground.AddXY(cx3, cy3, '', $00CCFFCC); // Zona 9
+
+  // E. Series Label Angka (1-9 di tengah kotak)
+  var SeriesZoneLabels := TPointSeries.Create(ChartAutonomicBalance);
+  SeriesZoneLabels.ParentChart := ChartAutonomicBalance;
+  SeriesZoneLabels.Pointer.Visible := False; // Sembunyikan titik, hanya butuh teks
+  SeriesZoneLabels.Marks.Visible := True;
+  SeriesZoneLabels.Marks.Transparent := True; // Transparan agar warna background terlihat
+  SeriesZoneLabels.Marks.Arrow.Visible := False;
+  SeriesZoneLabels.Marks.Font.Size := 14;
+  SeriesZoneLabels.Marks.Font.Style := [fsBold];
+  SeriesZoneLabels.SeriesColor := clBlack;
+
+  SeriesZoneLabels.AddXY(cx1, cy1, '1');
+  SeriesZoneLabels.AddXY(cx2, cy1, '2');
+  SeriesZoneLabels.AddXY(cx3, cy1, '3');
+  SeriesZoneLabels.AddXY(cx1, cy2, '4');
+  SeriesZoneLabels.AddXY(cx2, cy2, '5');
+  SeriesZoneLabels.AddXY(cx3, cy2, '6');
+  SeriesZoneLabels.AddXY(cx1, cy3, '7');
+  SeriesZoneLabels.AddXY(cx2, cy3, '8');
+  SeriesZoneLabels.AddXY(cx3, cy3, '9');
+
+  // F. Garis Grid 3x3 (Menggantikan loop step 2 agar kompatibel & rapi)
+  // Kita buat Series khusus garis agar tidak miring/diagonal
+  var SeriesGridLines := TLineSeries.Create(ChartAutonomicBalance);
+  SeriesGridLines.ParentChart := ChartAutonomicBalance;
+  SeriesGridLines.Color := clSilver; // Sesuai request (Silver)
+  SeriesGridLines.LinePen.Width := 2;
+  SeriesGridLines.TreatNulls := tnDontPaint; // PENTING: Agar garis tidak menyambung sembarangan
+
+  // Batas antar zona adalah di 4.5 dan 6.5 (berdasarkan titik tengah 3.25, 5.5, 7.75)
+  // Garis Vertikal
+  SeriesGridLines.AddXY(4.5, 2.0); SeriesGridLines.AddXY(4.5, 9.0);
+  SeriesGridLines.AddNull(''); // Putus
+  SeriesGridLines.AddXY(6.5, 2.0); SeriesGridLines.AddXY(6.5, 9.0);
+  SeriesGridLines.AddNull(''); // Putus
+  // Garis Horizontal
+  SeriesGridLines.AddXY(2.0, 4.5); SeriesGridLines.AddXY(9.0, 4.5);
+  SeriesGridLines.AddNull(''); // Putus
+  SeriesGridLines.AddXY(2.0, 6.5); SeriesGridLines.AddXY(9.0, 6.5);
+
+  // G. Titik Pasien (Red Dot)
+  SeriesAutonomicBalance := TPointSeries.Create(ChartAutonomicBalance);
+  SeriesAutonomicBalance.ParentChart := ChartAutonomicBalance;
+  SeriesAutonomicBalance.Title := 'Patient State';
+  SeriesAutonomicBalance.Pointer.Style := psCircle;
+  SeriesAutonomicBalance.Pointer.HorizSize := 8; // Ukuran titik pasien
+  SeriesAutonomicBalance.Pointer.VertSize := 8;
+  SeriesAutonomicBalance.Color := clRed;
+  SeriesAutonomicBalance.Pointer.Pen.Color := clBlack; // Outline hitam biar kontras
+  SeriesAutonomicBalance.Marks.Visible := False;
+
+  // Plot hanya jika nilai valid (>0) dan dalam rentang (2-9) agar terlihat
+  if (LnLF > 2.0) and (LnHF > 2.0) then
+  begin
+    SeriesAutonomicBalance.AddXY(LnLF, LnHF);
+
+    // Update Subtitle Info
+    ChartAutonomicBalance.SubTitle.Text.Text := Format('Result: Ln(LF)=%.2f, Ln(HF)=%.2f', [LnLF, LnHF]);
+    ChartAutonomicBalance.SubTitle.Visible := True;
+  end;
+end;
+
+procedure TForm1.UpdateDWTPlots;
+var
+  i: Integer;
+  q_signal: TSignalArray;
+  fft_freqs, fft_mags, psd_freqs, psd_vals: TSignalArray;
+  chartSignal, chartFFT, chartPSD, chartFilterResp: TChart;
+  series: TLineSeries; // Generik untuk penggunaan ulang
+  respDict: TDictionary<Integer, TPair<TSignalArray, TSignalArray>>;
+  respPair: TPair<TSignalArray, TSignalArray>;
+
+  function GetOrCreateSeries(AChart: TChart): TLineSeries;
+  begin
+    if AChart.SeriesCount = 0 then
+    begin
+      Result := TLineSeries.Create(AChart);
+      Result.ParentChart := AChart;
+      Result.Title := 'Data';
+      Result.Pointer.Visible := False; // Matikan titik-titik agar ringan
+    end
+    else
+      Result := AChart.Series[0] as TLineSeries;
+  end;
+
+begin
+  if not Assigned(FDWTCoefficients) then Exit;
+
+  Log('Updating DWT plots...');
+
+  // 1. Plot DWT Coefficients (Time, FFT, PSD) untuk Q1..Q8
+  for i := 1 to 8 do
+  begin
+    if FDWTCoefficients.TryGetValue(i, q_signal) then
+    begin
+      // Cari komponen chart berdasarkan nama
+      chartSignal := FindComponent('ChartQ' + IntToStr(i) + 'Signal') as TChart;
+      chartFFT    := FindComponent('ChartQ' + IntToStr(i) + 'FFT') as TChart;
+      chartPSD    := FindComponent('ChartQ' + IntToStr(i) + 'PSD') as TChart;
+
+      // --- Plot Signal Time Domain ---
+      if Assigned(chartSignal) then
+      begin
+        // Fix Range 0-300s
+        chartSignal.BottomAxis.Automatic := False;
+        chartSignal.BottomAxis.SetMinMax(0, 300);
+
+        series := GetOrCreateSeries(chartSignal); // Auto-create series
+        PlotSignal(series, FTimeDownsampled, q_signal, False);
+      end;
+
+      // --- Plot Signal FFT ---
+      if Assigned(chartFFT) then
+      begin
+        FAnalyzer.FFTMagnitudeAndFrequencies(q_signal, FDownsampledFs, fft_freqs, fft_mags);
+
+        chartFFT.BottomAxis.Automatic := False;
+        chartFFT.BottomAxis.SetMinMax(0, FDownsampledFs / 2); // Nyquist
+
+        series := GetOrCreateSeries(chartFFT); // Auto-create series
+        PlotFrequencySpectrum(series, fft_freqs, fft_mags);
+      end;
+
+      // --- Plot Signal PSD ---
+      if Assigned(chartPSD) then
+      begin
+        FAnalyzer.Welch(q_signal, FDownsampledFs, psd_freqs, psd_vals);
+
+        series := GetOrCreateSeries(chartPSD); // Auto-create series
+        PlotFrequencySpectrum(series, psd_freqs, psd_vals);
+      end;
+    end;
+  end;
+
+  // 2. Plot Global Frequency Response (Tab 8)
+  // --- Downsampled FS ---
+  respDict := FAnalyzer.CalculateQJFrequencyResponses(FDownsampledFs);
+  try
+    for i := 1 to 8 do
+    begin
+      if respDict.TryGetValue(i, respPair) then
+      begin
+        // Cari series statis yang ada di Form (SeriesQ1DS, dst)
+        // Pastikan nama komponen di Form Designer sesuai: SeriesQ1DS..SeriesQ8DS
+        series := FindComponent('SeriesQ' + IntToStr(i) + 'DS') as TLineSeries;
+        if Assigned(series) then
+        begin
+          // Bersihkan dulu sebelum plot baru
+          if i = 1 then ChartDWTResponseDownsampledFS.BottomAxis.SetMinMax(0, FDownsampledFs / 2);
+          PlotFrequencySpectrum(series, respPair.Key, respPair.Value);
+        end;
+        chartFilterResp := FindComponent('ChartQ' + IntToStr(i) + 'FilterResponse') as TChart;
+        if Assigned(chartFilterResp) then
+        begin
+           // Setup Axis
+           chartFilterResp.BottomAxis.Automatic := False;
+           chartFilterResp.BottomAxis.SetMinMax(0, FDownsampledFs / 2);
+
+           // Plot Data
+           series := GetOrCreateSeries(chartFilterResp);
+           series.SeriesColor := clMaroon; // Beri warna berbeda agar jelas
+           series.AreaChartBrush.Style := bsSolid; // Opsional: Beri shading area jika mau
+           series.AreaChartBrush.Color := clWebLavender;
+
+           PlotFrequencySpectrum(series, respPair.Key, respPair.Value);
+        end;
+      end;
+    end;
+  finally
+    respDict.Free;
+  end;
+
+  // --- Original FS ---
+  respDict := FAnalyzer.CalculateQJFrequencyResponses(FOriginalFs);
+  try
+    for i := 1 to 8 do
+    begin
+      if respDict.TryGetValue(i, respPair) then
+      begin
+        series := FindComponent('SeriesQ' + IntToStr(i) + 'Orig') as TLineSeries;
+        if Assigned(series) then
+        begin
+           if i = 1 then ChartDWTResponseOrigFS.BottomAxis.SetMinMax(0, FOriginalFs / 2);
+           PlotFrequencySpectrum(series, respPair.Key, respPair.Value);
+        end;
+      end;
+    end;
+  finally
+    respDict.Free;
+  end;
+
+  Log('DWT Plots updated.');
+end;
+
+procedure TForm1.SetupChartAxes;
+  procedure SetAxis(AChart: TChart; XTitle, YTitle: string);
+  begin
+    if Assigned(AChart) then
+    begin
+      AChart.Axes.Bottom.Title.Caption := XTitle;
+      AChart.Axes.Bottom.Title.Font.Style := [fsBold]; // Opsional: Tebalkan huruf
+      AChart.Axes.Left.Title.Caption := YTitle;
+      AChart.Axes.Left.Title.Font.Style := [fsBold];
+    end;
+  end;
+
+var
+  i: Integer;
+begin
+  // --- Tab 1: Signal Processing ---
+  SetAxis(ChartRawSignal, 'Time (s)', 'Amplitude (mV)');
+  SetAxis(ChartFFTRaw, 'Frequency (Hz)', 'Magnitude');
+  SetAxis(ChartDownsampled, 'Time (s)', 'Amplitude (mV)');
+  SetAxis(ChartFFTDownsampled, 'Frequency (Hz)', 'Magnitude');
+  SetAxis(ChartPreprocessed, 'Time (s)', 'Amplitude (mV)');
+  SetAxis(ChartFFTPreprocessed, 'Frequency (Hz)', 'Magnitude');
+
+  // --- Tab 2: Peak Detection ---
+  SetAxis(ChartPeaks, 'Time (s)', 'Amplitude (mV)'); // Cardiac
+  SetAxis(ChartRespPeaks, 'Time (s)', 'Amplitude (mV)'); // Respiratory
+
+  // --- Tab 3: HRV Time ---
+  SetAxis(ChartTachogram, 'Beat Index (n)', 'RR Interval (ms)');
+  SetAxis(ChartRRHistogram, 'RR Interval (ms)', 'Count (n)');
+
+  // --- Tab 4: HRV Freq ---
+  SetAxis(ChartHRVPSD, 'Frequency (Hz)', 'PSD (ms^2/Hz)');
+  SetAxis(ChartVasoPSD, 'Frequency (Hz)', 'Power');
+
+  // --- Tab 5: HRV Non-Linear ---
+  SetAxis(ChartPoincare, 'RR[n] (ms)', 'RR[n+1] (ms)');
+
+  // --- Tab 6: Autonomic Balance ---
+  SetAxis(ChartAutonomicBalance, 'Sympathetic (Ln LF)', 'Parasympathetic (Ln HF)');
+
+  // --- Tab 7: DWT Coefficients (Q1 - Q8) ---
+  for i := 1 to 8 do
+  begin
+    // Signal Chart
+    SetAxis(FindComponent('ChartQ' + IntToStr(i) + 'Signal') as TChart,
+            'Time (s)', 'Amplitude (mV)');
+
+    // FFT Chart
+    SetAxis(FindComponent('ChartQ' + IntToStr(i) + 'FFT') as TChart,
+            'Frequency (Hz)', 'Magnitude');
+
+    // PSD Chart
+    SetAxis(FindComponent('ChartQ' + IntToStr(i) + 'PSD') as TChart,
+            'Frequency (Hz)', 'Power Spectral Density');
+
+    // Filter Response Chart
+    SetAxis(FindComponent('ChartQ' + IntToStr(i) + 'FilterResponse') as TChart,
+            'Frequency (Hz)', 'Magnitude');
+  end;
+
+  // --- Tab 8: DWT Freq Response (Global) ---
+  SetAxis(ChartDWTResponseOrigFS, 'Frequency (Hz)', 'Magnitude');
+  SetAxis(ChartDWTResponseDownsampledFS, 'Frequency (Hz)', 'Magnitude');
+end;
+
+procedure TForm1.SetupUI;
+var
+  i: Integer;
+  items: TStrings;
+begin
+  SetupChartAxes;
+  items := TStringList.Create;
+  try
+    items.Add(SOURCE_PREPROCESSED);
+    for i := 1 to 8 do
+      items.Add('DWT Q' + IntToStr(i));
+
+    cbVMASource.Items.Assign(items);
+    cbRRSource.Items.Assign(items);
+    cbHRVSource.Items.Assign(items);
+
+    cbVMASource.ItemIndex := 0;
+    cbRRSource.ItemIndex := 5;
+    cbHRVSource.ItemIndex := 0;
+  finally
+    items.Free;
+  end;
+end;
+
+procedure TForm1.ClearAllData;
+begin
+  FSignalRaw := nil;
+  FTimeRaw := nil;
+  FSignalDownsampled := nil;
+  FTimeDownsampled := nil;
+  FPreprocessedSignal := nil;
+  if Assigned(FDWTCoefficients) then
+  begin
+    FDWTCoefficients.Free;
+    FDWTCoefficients := nil;
+  end;
+  ClearAllCharts;
+  ClearAllResults;
+end;
+
+procedure TForm1.ClearAllCharts;
+var
+  i: Integer;
+begin
+  for i := 0 to Self.ComponentCount - 1 do
+  begin
+    if Components[i] is TChartSeries then
+      (Components[i] as TChartSeries).Clear;
+  end;
+end;
+
+procedure TForm1.ClearAllResults;
+var
+  i: Integer;
+  grpBox: TGroupBox;
+begin
+  for i := 0 to Panel1.ControlCount - 1 do
+  begin
+    if Panel1.Controls[i] is TGroupBox then
+    begin
+      grpBox := Panel1.Controls[i] as TGroupBox;
+      for var j := 0 to grpBox.ControlCount - 1 do
+        if grpBox.Controls[j] is TEdit then
+          (grpBox.Controls[j] as TEdit).Text := '';
+    end;
+  end;
+  edtRespRate.Text := 'N/A';
+  edtVasoRate.Text := 'N/A';
+end;
+
+procedure TForm1.UpdateResultsDisplay(const TimeFeats: TTimeDomainFeatures;
+  const FreqFeats: TFrequencyDomainFeatures; const NonLinFeats: TNonLinearFeatures);
+begin
+  edtMeanHR.Text := Format('%.2f', [TimeFeats.MeanHR]);
+  edtSDNN.Text := Format('%.2f', [TimeFeats.SDNN]);
+  edtSDANN.Text := Format('%.2f', [TimeFeats.SDANN]);
+  edtSDNNIndex.Text := Format('%.2f', [TimeFeats.SDNNIndex]);
+  edtRMSSD.Text := Format('%.2f', [TimeFeats.RMSSD]);
+  edtSDSD.Text := Format('%.2f', [TimeFeats.SDSD]);
+  edtNN50.Text := IntToStr(TimeFeats.NN50);
+  edtpNN50.Text := Format('%.2f', [TimeFeats.pNN50]);
+  edtHTI.Text := Format('%.2f', [TimeFeats.HTI]);
+  edtTINN.Text := Format('%.2f', [TimeFeats.TINN]);
+  edtCVNN.Text := Format('%.4f', [TimeFeats.CVNN]);
+  edtCVSD.Text := Format('%.4f', [TimeFeats.CVSD]);
+  edtSkewness.Text := Format('%.4f', [TimeFeats.Skewness]);
+
+  edtTotalPower.Text := Format('%.2f', [FreqFeats.Total_Power]);
+  edtLFPower.Text := Format('%.2f', [FreqFeats.LF_Power]);
+  edtHFPower.Text := Format('%.2f', [FreqFeats.HF_Power]);
+  edtLFHF.Text := Format('%.2f', [FreqFeats.LF_HF_Ratio]);
+  edtLFNu.Text := Format('%.2f', [FreqFeats.LF_nu]);
+  edtHFNu.Text := Format('%.2f', [FreqFeats.HF_nu]);
+  edtPeakLF.Text := Format('%.3f', [FreqFeats.Peak_LF]);
+  edtPeakHF.Text := Format('%.3f', [FreqFeats.Peak_HF]);
+
+  edtSD1.Text := Format('%.2f', [NonLinFeats.SD1]);
+  edtSD2.Text := Format('%.2f', [NonLinFeats.SD2]);
+  edtSD1SD2.Text := Format('%.2f', [NonLinFeats.SD1_SD2_Ratio]);
+end;
+
+function TForm1.GetSignalFromSource(const SourceName: string): TSignalArray;
+var
+  q_index: Integer;
+  cleanName: string;
+begin
+  Result := nil;
+  cleanName := Trim(SourceName); // Hilangkan spasi tidak perlu
+
+  if cleanName = SOURCE_PREPROCESSED then
+  begin
+    Log('Debug: Loading Source -> Pre-processed Signal');
+    Result := FSignalDownsampled;
+  end
+  else if (Pos('DWT Q', cleanName) = 1) and Assigned(FDWTCoefficients) then
+  begin
+    // Parsing angka setelah "DWT Q"
+    // Asumsi format: "DWT Q1", "DWT Q8", dll.
+    // Ambil substring mulai dari karakter ke-6 sampai akhir
+    cleanName := Copy(cleanName, 6, Length(cleanName)-5);
+
+    if TryStrToInt(cleanName, q_index) then
+    begin
+      if FDWTCoefficients.ContainsKey(q_index) then
+      begin
+        Result := FDWTCoefficients[q_index];
+        Log(Format('Debug: Loading Source -> DWT Level Q%d (Length: %d)', [q_index, Length(Result)]));
+      end
+      else
+        Log(Format('ERROR: DWT Q%d requested but not found in Dictionary.', [q_index]));
+    end
+    else
+      Log('ERROR: Failed to parse DWT Level number from: ' + SourceName);
+  end
+  else
+    Log('ERROR: Unknown Source selected: ' + SourceName);
+end;
+
+function TForm1.LoadCSVData(const FileName, ColumnName: string): Boolean;
+var
+  SL: TStringList; i, colIndex, timeColIndex, startIndex: Integer;
+  line, colName: string; parts: TArray<string>;
+  tempSignal, tempTime: TList<Double>;
+  hasHeader: Boolean; val: Double;
+begin
+  Result := False; colIndex := -1; timeColIndex := -1; hasHeader := True;
+  SL := TStringList.Create;
+  tempSignal := TList<Double>.Create;
+  tempTime := TList<Double>.Create;
+  try
+    SL.LoadFromFile(FileName);
+    if SL.Count < 2 then raise Exception.Create('File is empty or has only a header.');
+    line := SL[0];
+    parts := line.Split([',', ';']);
+    if not TryStrToFloat(Trim(parts[0]), val) then
+    begin
+      hasHeader := True;
+      for i := 0 to High(parts) do
+      begin
+        colName := AnsiLowerCase(Trim(StringReplace(parts[i], '"', '', [rfReplaceAll])));
+        if (timeColIndex = -1) and (Pos('index', colName) > 0) then timeColIndex := i;
+        if (colIndex = -1) and (colName = AnsiLowerCase(Trim(ColumnName))) then colIndex := i;
+      end;
+    end
+    else
+    begin
+      hasHeader := False;
+      Log('CSV file detected without a header. Assuming Column 0 = Time, Column 1 = Signal.');
+      timeColIndex := 0; colIndex := 1;
+    end;
+    if colIndex = -1 then colIndex := High(parts);
+    if timeColIndex = -1 then timeColIndex := 0;
+
+    startIndex := IfThen(hasHeader, 1, 0);
+    for i := startIndex to SL.Count - 1 do
+    begin
+      line := SL[i];
+      parts := line.Split([',', ';']);
+      if (High(parts) >= colIndex) then
+      begin
+         if TryStrToFloat(StringReplace(parts[colIndex],'.',FormatSettings.DecimalSeparator,[]), val) then
+           tempSignal.Add(val);
+      end;
+    end;
+
+    if tempSignal.Count < 10 then raise Exception.Create('Not enough valid data points found.');
+
+    // FORCE TIME GENERATION BASED ON 50 Hz
+    // This fixes the "Index vs Seconds" issue
+    FOriginalFs := 50.0;
+    FSignalRaw := tempSignal.ToArray;
+    SetLength(FTimeRaw, Length(FSignalRaw));
+    for i := 0 to High(FTimeRaw) do
+      FTimeRaw[i] := i / FOriginalFs;
+
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Log('ERROR: ' + E.Message);
+      Result := False;
+    end;
+  end;
+  SL.Free; tempSignal.Free; tempTime.Free;
+end;
+
+procedure TForm1.Log(const Message: string);
+begin
+  if MemoLog.Lines.Count > 200 then MemoLog.Lines.Delete(0);
+  MemoLog.Lines.Add(FormatDateTime('[hh:nn:ss] ', Now) + Message);
+  MemoLog.SelStart := Length(MemoLog.Text);
+  Application.ProcessMessages;
+end;
+
+procedure TForm1.PlotSignal(Series: TChartSeries; const Time, Signal: TSignalArray; AutoScale: Boolean = True);
+var i: Integer;
+begin
+  if not Assigned(Series) or (Signal = nil) then Exit;
+  Series.Clear;
+  if (Length(Signal) > 0) then
+  begin
+    Series.BeginUpdate;
+    try
+      if (Time <> nil) and (Length(Time) = Length(Signal)) then
+        for i := 0 to High(Signal) do Series.AddXY(Time[i], Signal[i])
+      else
+        for i := 0 to High(Signal) do Series.Add(Signal[i]);
+    finally
+      Series.EndUpdate;
+      if AutoScale and (Series.Count > 0) then
+      begin
+        Series.ParentChart.Axes.Left.Automatic := True;
+        Series.ParentChart.Axes.Bottom.Automatic := True;
+      end;
+    end;
+  end;
+end;
+
+procedure TForm1.PlotFrequencySpectrum(Series: TChartSeries; const Freqs, Psd: TSignalArray; AutoScale: Boolean = True);
+var i: Integer;
+begin
+  if not Assigned(Series) or (Freqs=nil) then Exit;
+  Series.Clear;
+  if (Length(Freqs) > 0) and (Length(Freqs) = Length(Psd)) then
+  begin
+    Series.BeginUpdate;
+    try
+      for i := 0 to High(Freqs) do
+        Series.AddXY(Freqs[i], Psd[i]);
+    finally
+      Series.EndUpdate;
+      if AutoScale and (Series.Count > 0) then
+      begin
+        Series.ParentChart.Axes.Left.Automatic := True;
+        Series.ParentChart.Axes.Bottom.Automatic := True;
+      end;
+    end;
+  end;
+end;
+
+end.
